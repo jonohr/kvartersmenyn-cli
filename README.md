@@ -1,6 +1,6 @@
 # kvartersmenyn-cli
 
-Ett litet terminalverktyg som hämtar lunchmenyer från [kvartersmenyn.se](https://www.kvartersmenyn.se/). Standardläget hämtar Gårda i Göteborg (`garda_161`), men du kan ange valfritt område.
+Ett litet terminalverktyg som hämtar lunchmenyer från [kvartersmenyn.se](https://www.kvartersmenyn.se/). Du anger city/area via config eller flaggor; saknas det blir du ombedd att klistra in en kvartersmenyn-URL vid start.
 
 ## Kom igång
 
