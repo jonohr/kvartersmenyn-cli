@@ -466,8 +466,10 @@ func matchesName(name, queryLower string, maxDistance int) bool {
 		return true
 	}
 
-	dist := fuzzy.RankMatchFold(normQuery, normName)
-	return dist >= 0 && dist <= maxDistance
+	if dist, ok := safeRankMatchFold(normQuery, normName); ok {
+		return dist >= 0 && dist <= maxDistance
+	}
+	return false
 }
 
 func fuzzThreshold(length int) int {
@@ -481,6 +483,7 @@ func fuzzThreshold(length int) int {
 }
 
 func normalizeToken(s string) string {
+	s = strings.ToValidUTF8(s, "")
 	var b strings.Builder
 	for _, r := range s {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
@@ -488,6 +491,18 @@ func normalizeToken(s string) string {
 		}
 	}
 	return b.String()
+}
+
+func safeRankMatchFold(query, text string) (int, bool) {
+	query = strings.ToValidUTF8(query, "")
+	text = strings.ToValidUTF8(text, "")
+	defer func() {
+		if recover() != nil {
+			// Fuzzy matcher can panic on unexpected input; treat as no match.
+		}
+	}()
+	dist := fuzzy.RankMatchFold(query, text)
+	return dist, true
 }
 
 func filterByMenu(restaurants []Restaurant, query string) []Restaurant {
@@ -516,8 +531,10 @@ func matchesText(text, rawQuery, normQuery string, maxDistance int) bool {
 	if normQuery == "" {
 		return false
 	}
-	dist := fuzzy.RankMatchFold(normQuery, normText)
-	return dist >= 0 && dist <= maxDistance
+	if dist, ok := safeRankMatchFold(normQuery, normText); ok {
+		return dist >= 0 && dist <= maxDistance
+	}
+	return false
 }
 
 func filterCombined(restaurants []Restaurant, nameQuery, menuQuery string) []Restaurant {
