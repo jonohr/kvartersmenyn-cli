@@ -16,23 +16,18 @@ jobs:
         include:
           - goos: darwin
             goarch: amd64
-            archive_ext: tar.gz
             exe_ext: ""
           - goos: darwin
             goarch: arm64
-            archive_ext: tar.gz
             exe_ext: ""
           - goos: linux
             goarch: amd64
-            archive_ext: tar.gz
             exe_ext: ""
           - goos: linux
             goarch: arm64
-            archive_ext: tar.gz
             exe_ext: ""
           - goos: windows
             goarch: amd64
-            archive_ext: zip
             exe_ext: ".exe"
     steps:
       - name: Checkout
@@ -54,14 +49,7 @@ jobs:
           name="kvartersmenyn-cli_${GOOS}_${GOARCH}"
           out="dist/${name}${{ matrix.exe_ext }}"
           go build -trimpath -ldflags "-s -w" -o "${out}" .
-
-          if [ "${{ matrix.archive_ext }}" = "zip" ]; then
-            (cd dist && zip -q "${name}.zip" "${name}${{ matrix.exe_ext }}")
-            sha256sum "dist/${name}.zip" > "dist/${name}.zip.sha256"
-          else
-            (cd dist && tar -czf "${name}.tar.gz" "${name}${{ matrix.exe_ext }}")
-            sha256sum "dist/${name}.tar.gz" > "dist/${name}.tar.gz.sha256"
-          fi
+          sha256sum "${out}" > "${out}.sha256"
 
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
