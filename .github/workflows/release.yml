@@ -1,0 +1,69 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+            archive_ext: tar.gz
+            exe_ext: ""
+          - goos: darwin
+            goarch: arm64
+            archive_ext: tar.gz
+            exe_ext: ""
+          - goos: linux
+            goarch: amd64
+            archive_ext: tar.gz
+            exe_ext: ""
+          - goos: linux
+            goarch: arm64
+            archive_ext: tar.gz
+            exe_ext: ""
+          - goos: windows
+            goarch: amd64
+            archive_ext: zip
+            exe_ext: ".exe"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          name="kvartersmenyn-cli_${GOOS}_${GOARCH}"
+          out="dist/${name}${{ matrix.exe_ext }}"
+          go build -trimpath -ldflags "-s -w" -o "${out}" .
+
+          if [ "${{ matrix.archive_ext }}" = "zip" ]; then
+            (cd dist && zip -q "${name}.zip" "${name}${{ matrix.exe_ext }}")
+            sha256sum "dist/${name}.zip" > "dist/${name}.zip.sha256"
+          else
+            (cd dist && tar -czf "${name}.tar.gz" "${name}${{ matrix.exe_ext }}")
+            sha256sum "dist/${name}.tar.gz" > "dist/${name}.tar.gz.sha256"
+          fi
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
