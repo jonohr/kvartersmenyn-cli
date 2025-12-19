@@ -68,6 +68,21 @@ func main() {
 	flag.StringVar(&flags.Config, "config", defaultConfigPath(), "Path to YAML config (city, area, cache)")
 	flag.BoolVar(&flags.Help, "help", false, "Show help")
 	flag.BoolVar(&flags.InitCfg, "init-config", false, "Run the interactive config setup and exit")
+	flag.Usage = func() {
+		out := flag.CommandLine.Output()
+		fmt.Fprintf(out, "Usage: %s [options]\n\n", os.Args[0])
+		fmt.Fprintln(out, "Options:")
+		fmt.Fprintln(out, "  --city        City segment used in the kvartersmenyn URL (can be set in config)")
+		fmt.Fprintln(out, "  --area        Area slug from kvartersmenyn, e.g. garda_161 (repeat or comma-separated)")
+		fmt.Fprintln(out, "  --name        Filter by restaurant name (fuzzy, case-insensitive)")
+		fmt.Fprintln(out, "  --menu        Filter by menu text (fuzzy, case-insensitive)")
+		fmt.Fprintln(out, "  --search      Filter both name and menu (fuzzy, case-insensitive)")
+		fmt.Fprintln(out, "  --cache-dir   Directory for cached HTML (empty to disable, can be set in config)")
+		fmt.Fprintln(out, "  --cache-ttl   How long to reuse cached HTML (e.g. 6h, 2h)")
+		fmt.Fprintf(out, "  --config      Path to YAML config (default: %s)\n", defaultConfigPath())
+		fmt.Fprintln(out, "  --init-config Run the interactive config setup and exit")
+		fmt.Fprintln(out, "  --help        Show help and exit")
+	}
 	flag.Parse()
 
 	if flags.Help {
