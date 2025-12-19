@@ -10,7 +10,6 @@ Ett litet terminalverktyg som hämtar lunchmenyer från [kvartersmenyn.se](https
 
 Flaggor:
 
- - `-area` – områdessluggen från URL:en, t.ex. `garda_161` (kan sättas i config). Måste anges om inte satt i config.
 - `-area` – områdessluggen från URL:en, t.ex. `garda_161` (kan sättas i config). Måste anges om inte satt i config.
 - `-city` – stadssegmentet i URL:en, t.ex. `goteborg` (kan sättas i config). Måste anges om inte satt i config.
 - `-file` – valfritt lokalt HTML-dokument (hoppar över nätverksanrop, bra för testning).
