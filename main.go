@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"flag"
@@ -47,8 +48,9 @@ func main() {
 	flag.Parse()
 
 	cfg, err := loadConfig(flags.Config)
-	if err != nil {
-		log.Fatalf("%v", err)
+	if err != nil || cfg == nil || cfg.City == "" || cfg.Area == "" {
+		fmt.Println("Ingen giltig config hittades. Vi behöver en URL från kvartersmenyn och (valfri) cache-ttl.")
+		cfg = promptAndSaveConfig(flags.Config)
 	}
 
 	opts := mergeOptions(cfg, flags)
@@ -198,6 +200,86 @@ func cacheAndWrap(body io.ReadCloser, url, dir, city, area string) (io.ReadClose
 	}
 
 	return io.NopCloser(bytes.NewReader(data)), url
+}
+
+func promptAndSaveConfig(path string) *Config {
+	reader := bufio.NewReader(os.Stdin)
+
+	var city, area string
+	for {
+		fmt.Print("Ange URL från kvartersmenyn (t.ex. https://www.kvartersmenyn.se/index.php/goteborg/area/garda_161): ")
+		line, _ := reader.ReadString('\n')
+		line = strings.TrimSpace(line)
+		c, a, ok := parseAreaURL(line)
+		if !ok {
+			fmt.Println("Kunde inte tolka URL:en. Försök igen.")
+			continue
+		}
+		city, area = c, a
+		break
+	}
+
+	fmt.Print("Cache TTL i Go-durationformat (standard 6h): ")
+	ttlInput, _ := reader.ReadString('\n')
+	ttlInput = strings.TrimSpace(ttlInput)
+	if ttlInput == "" {
+		ttlInput = "6h"
+	}
+
+	cacheDir := defaultCacheDir()
+	if cacheDir == "" {
+		cacheDir = ".cache"
+	}
+
+	cfg := &Config{
+		City:     city,
+		Area:     area,
+		CacheDir: cacheDir,
+		CacheTTL: ttlInput,
+	}
+
+	if err := saveConfig(path, cfg); err != nil {
+		fmt.Printf("Varning: kunde inte skriva config: %v\n", err)
+	}
+
+	return cfg
+}
+
+func parseAreaURL(raw string) (string, string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", "", false
+	}
+
+	raw = strings.TrimPrefix(raw, "https://")
+	raw = strings.TrimPrefix(raw, "http://")
+
+	if idx := strings.Index(raw, "kvartersmenyn.se/"); idx >= 0 {
+		raw = raw[idx+len("kvartersmenyn.se/"):]
+	}
+	if idx := strings.Index(raw, "index.php/"); idx >= 0 {
+		raw = raw[idx+len("index.php/"):]
+	}
+
+	parts := strings.Split(raw, "/")
+	if len(parts) < 3 {
+		return "", "", false
+	}
+
+	city := parts[0]
+	var area string
+	for i := 0; i < len(parts)-1; i++ {
+		if parts[i] == "area" {
+			area = parts[i+1]
+			break
+		}
+	}
+
+	if city == "" || area == "" {
+		return "", "", false
+	}
+
+	return city, area, true
 }
 
 func filterRestaurants(restaurants []Restaurant, query string) []Restaurant {
