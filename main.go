@@ -20,8 +20,7 @@ import (
 
 type Flags struct {
 	City     string
-	Area     string
-	File     string
+	Areas    areaList
 	Name     string
 	Search   string
 	Menu     string
@@ -32,9 +31,7 @@ type Flags struct {
 }
 
 type Options struct {
-	City     string
-	Area     string
-	File     string
+	Areas    []AreaConfig
 	Name     string
 	Search   string
 	Menu     string
@@ -42,11 +39,26 @@ type Options struct {
 	CacheTTL time.Duration
 }
 
+type areaList []string
+
+func (a *areaList) String() string {
+	return strings.Join(*a, ",")
+}
+
+func (a *areaList) Set(value string) error {
+	for _, part := range strings.Split(value, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			*a = append(*a, part)
+		}
+	}
+	return nil
+}
+
 func main() {
 	flags := Flags{}
 	flag.StringVar(&flags.City, "city", "", "City segment used in the kvartersmenyn URL (can be set in config)")
-	flag.StringVar(&flags.Area, "area", "", "Area slug from kvartersmenyn, e.g. garda_161 (can be set in config)")
-	flag.StringVar(&flags.File, "file", "", "Optional local HTML file to parse instead of fetching from the site")
+	flag.Var(&flags.Areas, "area", "Area slug from kvartersmenyn, e.g. garda_161 (can be repeated or comma-separated)")
 	flag.StringVar(&flags.Name, "name", "", "Filter by restaurant name (fuzzy, case-insensitive)")
 	flag.StringVar(&flags.Menu, "menu", "", "Filter by menu text (fuzzy, case-insensitive)")
 	flag.StringVar(&flags.Search, "search", "", "Filter both name and menu (fuzzy, case-insensitive)")
@@ -62,98 +74,113 @@ func main() {
 	}
 
 	cfg, err := loadConfig(flags.Config)
-	if err != nil || cfg == nil || cfg.City == "" || cfg.Area == "" {
-		fmt.Println("No valid config found. We need a kvartersmenyn URL and (optional) cache TTL.")
-		cfg = promptAndSaveConfig(flags.Config)
+	if err != nil || cfg == nil || len(configAreas(cfg)) == 0 {
+		if len(flags.Areas) == 0 {
+			fmt.Println("No valid config found. We need at least one kvartersmenyn URL and (optional) cache TTL.")
+			cfg = promptAndSaveConfig(flags.Config)
+		} else if cfg == nil {
+			cfg = &Config{}
+		}
 	}
 
-	opts := mergeOptions(cfg, flags)
+	opts, err := mergeOptions(cfg, flags)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-
-	var reader io.ReadCloser
-	var sourceDesc string
-	if opts.File != "" {
-		file, err := os.Open(opts.File)
-		if err != nil {
-			log.Fatalf("could not read file %s: %v", opts.File, err)
-		}
-		reader = file
-		sourceDesc = opts.File
-	} else {
-		if opts.City == "" || opts.Area == "" {
-			log.Fatal("city and area must be provided via flags or config")
-		}
-		if cache, desc, ok := tryCache(opts.CacheDir, opts.City, opts.Area, opts.CacheTTL); ok {
-			reader = cache
-			sourceDesc = desc
-		} else {
-			url := buildAreaURL(opts.City, opts.Area)
-			resp, err := fetchHTML(ctx, url)
-			if err != nil {
-				log.Fatalf("could not fetch data: %v", err)
-			}
-			reader, sourceDesc = cacheAndWrap(resp.Body, url, opts.CacheDir, opts.City, opts.Area)
-		}
-	}
-	defer reader.Close()
-
-	restaurants, err := parseRestaurants(reader)
-	if err != nil {
-		log.Fatalf("could not parse page: %v", err)
-	}
 
 	nameQuery := strings.TrimSpace(opts.Name)
 	menuQuery := strings.TrimSpace(opts.Menu)
 	combinedQuery := strings.TrimSpace(opts.Search)
 
-	if combinedQuery != "" {
-		if nameQuery == "" {
-			nameQuery = combinedQuery
+	for _, area := range opts.Areas {
+		reader, sourceRaw, err := loadAreaReader(ctx, opts.CacheDir, area, opts.CacheTTL)
+		if err != nil {
+			log.Fatalf("could not fetch data for %s: %v", areaLabel(area), err)
 		}
-		if menuQuery == "" {
-			menuQuery = combinedQuery
-		}
-		restaurants = filterCombined(restaurants, nameQuery, menuQuery)
-	} else {
-		if nameQuery != "" {
-			restaurants = filterRestaurants(restaurants, nameQuery)
-		}
-		if menuQuery != "" {
-			restaurants = filterByMenu(restaurants, menuQuery)
-		}
-	}
 
-	if len(restaurants) == 0 {
-		noHitMsg(sourceDesc, nameQuery, menuQuery)
-		return
-	}
+		restaurants, err := parseRestaurants(reader)
+		reader.Close()
+		if err != nil {
+			log.Fatalf("could not parse page for %s: %v", areaLabel(area), err)
+		}
 
-	printHeader(sourceDesc, nameQuery, menuQuery)
-	for _, r := range restaurants {
-		fmt.Printf("%s — %s\n", r.Name, r.Price)
-		if r.Address != "" {
-			fmt.Printf("  %s\n", r.Address)
-		}
-		if r.Phone != "" {
-			fmt.Printf("  Tel: %s\n", r.Phone)
-		}
-		if r.Link != "" {
-			fmt.Printf("  Link: %s\n", r.Link)
-		}
-		if len(r.Menu) > 0 {
-			fmt.Printf("  Menu:\n")
-			for _, line := range r.Menu {
-				fmt.Printf("    - %s\n", line)
+		if combinedQuery != "" {
+			if nameQuery == "" {
+				nameQuery = combinedQuery
+			}
+			if menuQuery == "" {
+				menuQuery = combinedQuery
+			}
+			restaurants = filterCombined(restaurants, nameQuery, menuQuery)
+		} else {
+			if nameQuery != "" {
+				restaurants = filterRestaurants(restaurants, nameQuery)
+			}
+			if menuQuery != "" {
+				restaurants = filterByMenu(restaurants, menuQuery)
 			}
 		}
-		fmt.Println()
+
+		sourceDesc := describeSource(area, sourceRaw)
+		if len(restaurants) == 0 {
+			noHitMsg(sourceDesc, nameQuery, menuQuery)
+			continue
+		}
+
+		printHeader(sourceDesc, nameQuery, menuQuery)
+		for _, r := range restaurants {
+			fmt.Printf("%s — %s\n", r.Name, r.Price)
+			if r.Address != "" {
+				fmt.Printf("  %s\n", r.Address)
+			}
+			if r.Phone != "" {
+				fmt.Printf("  Tel: %s\n", r.Phone)
+			}
+			if r.Link != "" {
+				fmt.Printf("  Link: %s\n", r.Link)
+			}
+			if len(r.Menu) > 0 {
+				fmt.Printf("  Menu:\n")
+				for _, line := range r.Menu {
+					fmt.Printf("    - %s\n", line)
+				}
+			}
+			fmt.Println()
+		}
 	}
 }
 
 func buildAreaURL(city, area string) string {
 	return fmt.Sprintf("https://www.kvartersmenyn.se/index.php/%s/area/%s", city, area)
+}
+
+func areaLabel(area AreaConfig) string {
+	return fmt.Sprintf("%s/%s", area.City, area.Area)
+}
+
+func describeSource(area AreaConfig, source string) string {
+	label := areaLabel(area)
+	if strings.HasPrefix(source, "cache:") {
+		return label + " (cache)"
+	}
+	return label
+}
+
+func loadAreaReader(ctx context.Context, cacheDir string, area AreaConfig, ttl time.Duration) (io.ReadCloser, string, error) {
+	if cache, desc, ok := tryCache(cacheDir, area.City, area.Area, ttl); ok {
+		return cache, desc, nil
+	}
+
+	url := buildAreaURL(area.City, area.Area)
+	resp, err := fetchHTML(ctx, url)
+	if err != nil {
+		return nil, "", err
+	}
+	reader, source := cacheAndWrap(resp.Body, url, cacheDir, area.City, area.Area)
+	return reader, source, nil
 }
 
 func fetchHTML(ctx context.Context, url string) (*http.Response, error) {
@@ -227,18 +254,88 @@ func cacheAndWrap(body io.ReadCloser, url, dir, city, area string) (io.ReadClose
 func promptAndSaveConfig(path string) *Config {
 	reader := bufio.NewReader(os.Stdin)
 
-	var city, area string
+	var areas []AreaConfig
+	var defaultCity string
+
+	addArea := func(city, area string) {
+		if defaultCity == "" {
+			defaultCity = city
+		}
+		if city == defaultCity {
+			areas = append(areas, AreaConfig{Area: area})
+		} else {
+			areas = append(areas, AreaConfig{City: city, Area: area})
+		}
+	}
+
+	askAreaSlug := func(city string) {
+		for {
+			fmt.Printf("Enter area slug for %s (e.g. garda_161): ", city)
+			line, _ := reader.ReadString('\n')
+			line = strings.TrimSpace(line)
+			if line == "" {
+				fmt.Println("Area slug cannot be empty.")
+				continue
+			}
+			addArea(city, line)
+			break
+		}
+	}
+
 	for {
-		fmt.Print("Enter kvartersmenyn URL (e.g. https://www.kvartersmenyn.se/index.php/goteborg/area/garda_161): ")
+		fmt.Print("Enter kvartersmenyn URL (city or area), e.g. https://www.kvartersmenyn.se/index.php/goteborg or https://www.kvartersmenyn.se/index.php/goteborg/area/garda_161: ")
 		line, _ := reader.ReadString('\n')
 		line = strings.TrimSpace(line)
-		c, a, ok := parseAreaURL(line)
+		city, area, ok := parseAreaURL(line)
 		if !ok {
 			fmt.Println("Could not parse the URL. Please try again.")
 			continue
 		}
-		city, area = c, a
-		break
+		if area == "" {
+			defaultCity = city
+			askAreaSlug(city)
+		} else {
+			addArea(city, area)
+		}
+
+		fmt.Print("Add another area? (y/N): ")
+		moreInput, _ := reader.ReadString('\n')
+		moreInput = strings.TrimSpace(strings.ToLower(moreInput))
+		if moreInput != "y" && moreInput != "yes" && moreInput != "j" && moreInput != "ja" {
+			break
+		}
+
+		for {
+			fmt.Print("Enter area slug or kvartersmenyn URL: ")
+			line, _ := reader.ReadString('\n')
+			line = strings.TrimSpace(line)
+			if line == "" {
+				fmt.Println("Input cannot be empty.")
+				continue
+			}
+
+			if looksLikeURL(line) {
+				city, area, ok := parseAreaURL(line)
+				if !ok {
+					fmt.Println("Could not parse the URL. Please try again.")
+					continue
+				}
+				if area == "" {
+					defaultCity = city
+					askAreaSlug(city)
+				} else {
+					addArea(city, area)
+				}
+				break
+			}
+
+			if defaultCity == "" {
+				fmt.Println("Please provide a kvartersmenyn URL first to set the city.")
+				continue
+			}
+			addArea(defaultCity, line)
+			break
+		}
 	}
 
 	fmt.Print("Cache TTL in Go duration format (default 6h): ")
@@ -254,8 +351,8 @@ func promptAndSaveConfig(path string) *Config {
 	}
 
 	cfg := &Config{
-		City:     city,
-		Area:     area,
+		City:     defaultCity,
+		Areas:    areas,
 		CacheDir: cacheDir,
 		CacheTTL: ttlInput,
 	}
@@ -265,6 +362,15 @@ func promptAndSaveConfig(path string) *Config {
 	}
 
 	return cfg
+}
+
+func looksLikeURL(input string) bool {
+	return strings.Contains(input, "kvartersmenyn.se/") ||
+		strings.Contains(input, "http://") ||
+		strings.Contains(input, "https://") ||
+		strings.Contains(input, "index.php/") ||
+		strings.Contains(input, "/area/") ||
+		strings.Contains(input, "area/")
 }
 
 func parseAreaURL(raw string) (string, string, bool) {
@@ -284,7 +390,7 @@ func parseAreaURL(raw string) (string, string, bool) {
 	}
 
 	parts := strings.Split(raw, "/")
-	if len(parts) < 3 {
+	if len(parts) < 1 {
 		return "", "", false
 	}
 
@@ -297,7 +403,7 @@ func parseAreaURL(raw string) (string, string, bool) {
 		}
 	}
 
-	if city == "" || area == "" {
+	if city == "" {
 		return "", "", false
 	}
 

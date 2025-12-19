@@ -13,10 +13,16 @@ import (
 )
 
 type Config struct {
-	City     string `yaml:"city"`
-	Area     string `yaml:"area"`
-	CacheDir string `yaml:"cache_dir"`
-	CacheTTL string `yaml:"cache_ttl"`
+	City     string       `yaml:"city,omitempty"`
+	Area     string       `yaml:"area,omitempty"`
+	Areas    []AreaConfig `yaml:"areas,omitempty"`
+	CacheDir string       `yaml:"cache_dir"`
+	CacheTTL string       `yaml:"cache_ttl"`
+}
+
+type AreaConfig struct {
+	City string `yaml:"city,omitempty"`
+	Area string `yaml:"area"`
 }
 
 func defaultCacheDir() string {
@@ -143,15 +149,29 @@ func configBaseDir() string {
 	}
 }
 
-func mergeOptions(cfg *Config, flags Flags) Options {
+func mergeOptions(cfg *Config, flags Flags) (Options, error) {
 	opts := Options{
-		City:     firstNonEmpty(flags.City, cfg.City),
-		Area:     firstNonEmpty(flags.Area, cfg.Area),
 		CacheDir: firstNonEmpty(flags.CacheDir, cfg.CacheDir, defaultCacheDir()),
 		Name:     strings.TrimSpace(flags.Name),
 		Search:   strings.TrimSpace(flags.Search),
 		Menu:     strings.TrimSpace(flags.Menu),
-		File:     flags.File,
+	}
+
+	if flags.City != "" && len(flags.Areas) == 0 {
+		return opts, errors.New("area must be provided when using -city")
+	}
+
+	if len(flags.Areas) > 0 {
+		if strings.TrimSpace(flags.City) == "" {
+			return opts, errors.New("city must be provided when using -area")
+		}
+		opts.Areas = makeAreas(flags.City, flags.Areas)
+	} else {
+		opts.Areas = configAreas(cfg)
+	}
+
+	if len(opts.Areas) == 0 {
+		return opts, errors.New("city and area must be provided via flags or config")
 	}
 
 	if ttlStr := firstNonEmpty(flags.CacheTTL, cfg.CacheTTL, "6h"); ttlStr != "" {
@@ -161,7 +181,42 @@ func mergeOptions(cfg *Config, flags Flags) Options {
 		}
 	}
 
-	return opts
+	return opts, nil
+}
+
+func configAreas(cfg *Config) []AreaConfig {
+	if cfg == nil {
+		return nil
+	}
+	defaultCity := strings.TrimSpace(cfg.City)
+	var areas []AreaConfig
+	for _, area := range cfg.Areas {
+		city := strings.TrimSpace(area.City)
+		if city == "" {
+			city = defaultCity
+		}
+		areaSlug := strings.TrimSpace(area.Area)
+		if city == "" || areaSlug == "" {
+			continue
+		}
+		areas = append(areas, AreaConfig{City: city, Area: areaSlug})
+	}
+	if len(areas) == 0 && defaultCity != "" && strings.TrimSpace(cfg.Area) != "" {
+		areas = append(areas, AreaConfig{City: defaultCity, Area: strings.TrimSpace(cfg.Area)})
+	}
+	return areas
+}
+
+func makeAreas(city string, areas []string) []AreaConfig {
+	var targets []AreaConfig
+	for _, area := range areas {
+		area = strings.TrimSpace(area)
+		if area == "" {
+			continue
+		}
+		targets = append(targets, AreaConfig{City: strings.TrimSpace(city), Area: area})
+	}
+	return targets
 }
 
 func firstNonEmpty(values ...string) string {
