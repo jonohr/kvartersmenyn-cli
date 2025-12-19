@@ -180,7 +180,14 @@ func buildAreaURL(city, area string) string {
 	return fmt.Sprintf("https://www.kvartersmenyn.se/index.php/%s/area/%s", city, area)
 }
 
+func buildCityURL(city string) string {
+	return fmt.Sprintf("https://www.kvartersmenyn.se/index.php/%s", city)
+}
+
 func areaLabel(area AreaConfig) string {
+	if area.Area == "" {
+		return area.City
+	}
 	return fmt.Sprintf("%s/%s", area.City, area.Area)
 }
 
@@ -193,16 +200,25 @@ func describeSource(area AreaConfig, source string) string {
 }
 
 func loadAreaReader(ctx context.Context, cacheDir string, area AreaConfig, ttl time.Duration) (io.ReadCloser, string, error) {
-	if cache, desc, ok := tryCache(cacheDir, area.City, area.Area, ttl); ok {
+	cacheKey := area.Area
+	if cacheKey == "" {
+		cacheKey = "all"
+	}
+	if cache, desc, ok := tryCache(cacheDir, area.City, cacheKey, ttl); ok {
 		return cache, desc, nil
 	}
 
-	url := buildAreaURL(area.City, area.Area)
+	var url string
+	if area.Area == "" {
+		url = buildCityURL(area.City)
+	} else {
+		url = buildAreaURL(area.City, area.Area)
+	}
 	resp, err := fetchHTML(ctx, url)
 	if err != nil {
 		return nil, "", err
 	}
-	reader, source := cacheAndWrap(resp.Body, url, cacheDir, area.City, area.Area)
+	reader, source := cacheAndWrap(resp.Body, url, cacheDir, area.City, cacheKey)
 	return reader, source, nil
 }
 
@@ -293,13 +309,9 @@ func promptAndSaveConfig(path string) *Config {
 
 	askAreaSlug := func(city string) {
 		for {
-			fmt.Printf("Enter area slug for %s (e.g. garda_161): ", city)
+			fmt.Printf("Enter area slug for %s (empty for whole city): ", city)
 			line, _ := reader.ReadString('\n')
 			line = strings.TrimSpace(line)
-			if line == "" {
-				fmt.Println("Area slug cannot be empty.")
-				continue
-			}
 			addArea(city, line)
 			break
 		}
@@ -332,11 +344,6 @@ func promptAndSaveConfig(path string) *Config {
 			fmt.Print("Enter area slug or kvartersmenyn URL: ")
 			line, _ := reader.ReadString('\n')
 			line = strings.TrimSpace(line)
-			if line == "" {
-				fmt.Println("Input cannot be empty.")
-				continue
-			}
-
 			if looksLikeURL(line) {
 				city, area, ok := parseAreaURL(line)
 				if !ok {

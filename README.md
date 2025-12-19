@@ -11,7 +11,7 @@ A small terminal tool that fetches lunch menus from [kvartersmenyn.se](https://w
 Flags:
 
 - `--area` - area slug from the URL, e.g. `garda_161` (can be repeated or comma-separated).
-- `--city` - city segment from the URL, e.g. `goteborg` (required when using `--area`).
+- `--city` - city segment from the URL, e.g. `goteborg` (required when using `--area`; optional for whole-city search).
 - `--name` - filter by restaurant name (case-insensitive, fuzzy).
 - `--menu` - filter by menu text (case-insensitive, fuzzy).
 - `--search` - filter both name and menu (fuzzy); can be combined with `--name`/`--menu` (specific ones win).
@@ -31,6 +31,7 @@ go run . --area garda_161 --search gaby   # searches both name and menu
 go run . --area garda_161 --cache-ttl 2h
 go run . --city stockholm --area ostermalm_42
 go run . --city goteborg --area garda_161 --area johanneberg_43
+go run . --city goteborg
 go run . --init-config
 ```
 
@@ -47,7 +48,7 @@ cache_dir: .cache
 cache_ttl: 6h
 ```
 
-You can list multiple areas in the `areas` array. Each item can inherit `city` from the top level or override it with its own `city` value.
+You can list multiple areas in the `areas` array. Each item can inherit `city` from the top level or override it with its own `city` value. If you only set `city` and omit `areas`, the whole city is used.
 
 Flags always win over config when both are set. Defaults are used when neither flags nor config specify a field.
 

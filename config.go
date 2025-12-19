@@ -22,7 +22,7 @@ type Config struct {
 
 type AreaConfig struct {
 	City string `yaml:"city,omitempty"`
-	Area string `yaml:"area"`
+	Area string `yaml:"area,omitempty"`
 }
 
 func defaultCacheDir() string {
@@ -157,15 +157,13 @@ func mergeOptions(cfg *Config, flags Flags) (Options, error) {
 		Menu:     strings.TrimSpace(flags.Menu),
 	}
 
-	if flags.City != "" && len(flags.Areas) == 0 {
-		return opts, errors.New("area must be provided when using -city")
-	}
-
 	if len(flags.Areas) > 0 {
 		if strings.TrimSpace(flags.City) == "" {
-			return opts, errors.New("city must be provided when using -area")
+			return opts, errors.New("city must be provided when using --area")
 		}
 		opts.Areas = makeAreas(flags.City, flags.Areas)
+	} else if strings.TrimSpace(flags.City) != "" {
+		opts.Areas = []AreaConfig{{City: strings.TrimSpace(flags.City)}}
 	} else {
 		opts.Areas = configAreas(cfg)
 	}
@@ -196,12 +194,12 @@ func configAreas(cfg *Config) []AreaConfig {
 			city = defaultCity
 		}
 		areaSlug := strings.TrimSpace(area.Area)
-		if city == "" || areaSlug == "" {
+		if city == "" {
 			continue
 		}
 		areas = append(areas, AreaConfig{City: city, Area: areaSlug})
 	}
-	if len(areas) == 0 && defaultCity != "" && strings.TrimSpace(cfg.Area) != "" {
+	if len(areas) == 0 && defaultCity != "" {
 		areas = append(areas, AreaConfig{City: defaultCity, Area: strings.TrimSpace(cfg.Area)})
 	}
 	return areas
