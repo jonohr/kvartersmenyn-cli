@@ -1,41 +1,41 @@
 # kvartersmenyn-cli
 
-Ett litet terminalverktyg som hämtar lunchmenyer från [kvartersmenyn.se](https://www.kvartersmenyn.se/). Du anger city/area via config eller flaggor; saknas det blir du ombedd att klistra in en kvartersmenyn-URL vid start.
+A small terminal tool that fetches lunch menus from [kvartersmenyn.se](https://www.kvartersmenyn.se/). You provide city/area via config or flags; if missing, you will be prompted to paste a kvartersmenyn URL on startup.
 
-## Kom igång
+## Getting started
 
-1. Installera Go 1.21+.
-2. Hämta beroenden: `go mod tidy`.
-3. Kör: `go run .`
+1. Install Go 1.21+.
+2. Fetch deps: `go mod tidy`.
+3. Run: `go run .`
 
-Flaggor:
+Flags:
 
-- `-area` – områdessluggen från URL:en, t.ex. `garda_161` (kan sättas i config). Måste anges om inte satt i config.
-- `-city` – stadssegmentet i URL:en, t.ex. `goteborg` (kan sättas i config). Måste anges om inte satt i config.
-- `-file` – valfritt lokalt HTML-dokument (hoppar över nätverksanrop, bra för testning).
-- `-name` – filtrera på restaurangnamn (case-insensitive med fuzzy matchning).
-- `-menu` – filtrera på menyrader (case-insensitive med fuzzy matchning).
-- `-search` – filtrera både namn och meny (fuzzy); kan kombineras med `-name`/`-menu` (de specifika vinner).
-- `-cache-dir` – katalog för cachead HTML (tom sträng stänger av). Default följer OS: Linux `~/.cache/kvartersmenyn/`, macOS `~/Library/Caches/kvartersmenyn/`, Windows `%LOCALAPPDATA%\\kvartersmenyn\\Cache\\` (kan sättas i config).
-- `-cache-ttl` – hur länge cachen får leva, t.ex. `6h` (default), `1h`, `48h` (kan sättas i config).
-- `-config` – sökväg till YAML-konfig (default: Linux `~/.config/kvartersmenyn/config.yaml`, macOS `~/Library/Application Support/kvartersmenyn/config.yaml`, Windows `%LOCALAPPDATA%\\kvartersmenyn\\config.yaml`).
-- `-help` – visa hjälpen och avsluta.
+- `-area` - area slug from the URL, e.g. `garda_161` (can be set in config). Required if not set in config.
+- `-city` - city segment from the URL, e.g. `goteborg` (can be set in config). Required if not set in config.
+- `-file` - optional local HTML document (skips network, handy for testing).
+- `-name` - filter by restaurant name (case-insensitive, fuzzy).
+- `-menu` - filter by menu text (case-insensitive, fuzzy).
+- `-search` - filter both name and menu (fuzzy); can be combined with `-name`/`-menu` (specific ones win).
+- `-cache-dir` - directory for cached HTML (empty string disables). Default per OS: Linux `~/.cache/kvartersmenyn/`, macOS `~/Library/Caches/kvartersmenyn/`, Windows `%LOCALAPPDATA%\\kvartersmenyn\\Cache\\` (can be set in config).
+- `-cache-ttl` - how long to reuse cache, e.g. `6h` (default), `1h`, `48h` (can be set in config).
+- `-config` - path to YAML config (default: Linux `~/.config/kvartersmenyn/config.yaml`, macOS `~/Library/Application Support/kvartersmenyn/config.yaml`, Windows `%LOCALAPPDATA%\\kvartersmenyn\\config.yaml`).
+- `-help` - show help and exit.
 
-Exempel:
+Examples:
 
 ```bash
 go run . -area garda_161
 go run . -area garda_161 -name ullevi
 go run . -area garda_161 -menu burgare
-go run . -area garda_161 -search gaby   # söker både namn och meny
+go run . -area garda_161 -search gaby   # searches both name and menu
 go run . -area garda_161 -cache-ttl 2h
 go run . -city stockholm -area ostermalm_42
 go run . -file fixtures/garda.html
 ```
 
-## Konfigurationsfil
+## Config file
 
-Skapa configfil (default-sökväg varierar per OS, se `-config` ovan) för att slippa flaggor:
+Create a config file (default path varies per OS, see `-config` above) to avoid passing flags:
 
 ```yaml
 city: goteborg
@@ -44,6 +44,6 @@ cache_dir: .cache
 cache_ttl: 6h
 ```
 
-Flaggor vinner alltid över config om båda är satta. Defaultvärden används om varken flagga eller config anger fältet.
+Flags always win over config when both are set. Defaults are used when neither flags nor config specify a field.
 
-Om ingen giltig config hittas vid start blir du interaktivt tillfrågad om en kvartersmenyn-URL (för att plocka city/area) samt cache-ttl (default 6h); därefter sparas config automatiskt på standardstigen.
+If no valid config is found on startup, you will be prompted for a kvartersmenyn URL (to extract city/area) and cache TTL (default 6h); the config is then saved to the default path.
