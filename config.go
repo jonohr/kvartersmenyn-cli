@@ -69,12 +69,12 @@ func loadConfig(path string) (*Config, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return &Config{}, nil
 		}
-		return nil, fmt.Errorf("kunde inte läsa config (%s): %w", path, err)
+		return nil, fmt.Errorf("could not read config (%s): %w", path, err)
 	}
 
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("kunde inte tolka config (%s): %w", path, err)
+		return nil, fmt.Errorf("could not parse config (%s): %w", path, err)
 	}
 	return &cfg, nil
 }
@@ -84,20 +84,20 @@ func saveConfig(path string, cfg *Config) error {
 		path = defaultConfigPath()
 	}
 	if path == "" {
-		return errors.New("ingen config-sökväg tillgänglig")
+		return errors.New("no config path available")
 	}
 
 	path = expandHome(path)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("kunde inte skapa konfigkatalog: %w", err)
+		return fmt.Errorf("could not create config directory: %w", err)
 	}
 
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
-		return fmt.Errorf("kunde inte serialisera config: %w", err)
+		return fmt.Errorf("could not serialize config: %w", err)
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("kunde inte skriva config (%s): %w", path, err)
+		return fmt.Errorf("could not write config (%s): %w", path, err)
 	}
 	return nil
 }
@@ -148,7 +148,9 @@ func mergeOptions(cfg *Config, flags Flags) Options {
 		City:     firstNonEmpty(flags.City, cfg.City),
 		Area:     firstNonEmpty(flags.Area, cfg.Area),
 		CacheDir: firstNonEmpty(flags.CacheDir, cfg.CacheDir, defaultCacheDir()),
+		Name:     strings.TrimSpace(flags.Name),
 		Search:   strings.TrimSpace(flags.Search),
+		Menu:     strings.TrimSpace(flags.Menu),
 		File:     flags.File,
 	}
 

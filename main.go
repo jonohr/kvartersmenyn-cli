@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/lithammer/fuzzysearch/fuzzy"
 )
@@ -21,17 +22,22 @@ type Flags struct {
 	City     string
 	Area     string
 	File     string
+	Name     string
 	Search   string
+	Menu     string
 	CacheDir string
 	CacheTTL string
 	Config   string
+	Help     bool
 }
 
 type Options struct {
 	City     string
 	Area     string
 	File     string
+	Name     string
 	Search   string
+	Menu     string
 	CacheDir string
 	CacheTTL time.Duration
 }
@@ -41,15 +47,23 @@ func main() {
 	flag.StringVar(&flags.City, "city", "", "City segment used in the kvartersmenyn URL (can be set in config)")
 	flag.StringVar(&flags.Area, "area", "", "Area slug from kvartersmenyn, e.g. garda_161 (can be set in config)")
 	flag.StringVar(&flags.File, "file", "", "Optional local HTML file to parse instead of fetching from the site")
-	flag.StringVar(&flags.Search, "search", "", "Filter by restaurant name (fuzzy, case-insensitive)")
+	flag.StringVar(&flags.Name, "name", "", "Filter by restaurant name (fuzzy, case-insensitive)")
+	flag.StringVar(&flags.Menu, "menu", "", "Filter by menu text (fuzzy, case-insensitive)")
+	flag.StringVar(&flags.Search, "search", "", "Filter both name and menu (fuzzy, case-insensitive)")
 	flag.StringVar(&flags.CacheDir, "cache-dir", "", "Directory for cached HTML (empty to disable, can be set in config)")
 	flag.StringVar(&flags.CacheTTL, "cache-ttl", "", "How long to reuse cached HTML (e.g. 6h, 2h). Overwrites config/default when set.")
 	flag.StringVar(&flags.Config, "config", defaultConfigPath(), "Path to YAML config (city, area, cache)")
+	flag.BoolVar(&flags.Help, "help", false, "Show help")
 	flag.Parse()
+
+	if flags.Help {
+		flag.Usage()
+		return
+	}
 
 	cfg, err := loadConfig(flags.Config)
 	if err != nil || cfg == nil || cfg.City == "" || cfg.Area == "" {
-		fmt.Println("Ingen giltig config hittades. Vi behöver en URL från kvartersmenyn och (valfri) cache-ttl.")
+		fmt.Println("No valid config found. We need a kvartersmenyn URL and (optional) cache TTL.")
 		cfg = promptAndSaveConfig(flags.Config)
 	}
 
@@ -63,13 +77,13 @@ func main() {
 	if opts.File != "" {
 		file, err := os.Open(opts.File)
 		if err != nil {
-			log.Fatalf("kunde inte läsa filen %s: %v", opts.File, err)
+			log.Fatalf("could not read file %s: %v", opts.File, err)
 		}
 		reader = file
 		sourceDesc = opts.File
 	} else {
 		if opts.City == "" || opts.Area == "" {
-			log.Fatal("city och area måste anges via flaggor eller config")
+			log.Fatal("city and area must be provided via flags or config")
 		}
 		if cache, desc, ok := tryCache(opts.CacheDir, opts.City, opts.Area, opts.CacheTTL); ok {
 			reader = cache
@@ -78,7 +92,7 @@ func main() {
 			url := buildAreaURL(opts.City, opts.Area)
 			resp, err := fetchHTML(ctx, url)
 			if err != nil {
-				log.Fatalf("kunde inte hämta data: %v", err)
+				log.Fatalf("could not fetch data: %v", err)
 			}
 			reader, sourceDesc = cacheAndWrap(resp.Body, url, opts.CacheDir, opts.City, opts.Area)
 		}
@@ -87,28 +101,36 @@ func main() {
 
 	restaurants, err := parseRestaurants(reader)
 	if err != nil {
-		log.Fatalf("kunde inte tolka sidan: %v", err)
+		log.Fatalf("could not parse page: %v", err)
 	}
 
-	query := strings.TrimSpace(opts.Search)
-	if query != "" {
-		restaurants = filterRestaurants(restaurants, query)
+	nameQuery := strings.TrimSpace(opts.Name)
+	menuQuery := strings.TrimSpace(opts.Menu)
+	combinedQuery := strings.TrimSpace(opts.Search)
+
+	if combinedQuery != "" {
+		if nameQuery == "" {
+			nameQuery = combinedQuery
+		}
+		if menuQuery == "" {
+			menuQuery = combinedQuery
+		}
+		restaurants = filterCombined(restaurants, nameQuery, menuQuery)
+	} else {
+		if nameQuery != "" {
+			restaurants = filterRestaurants(restaurants, nameQuery)
+		}
+		if menuQuery != "" {
+			restaurants = filterByMenu(restaurants, menuQuery)
+		}
 	}
 
 	if len(restaurants) == 0 {
-		if query != "" {
-			fmt.Printf("Inga träffar på \"%s\" i %s\n", query, sourceDesc)
-		} else {
-			fmt.Printf("Hittade inga lunchmenyer i %s\n", sourceDesc)
-		}
+		noHitMsg(sourceDesc, nameQuery, menuQuery)
 		return
 	}
 
-	if query != "" {
-		fmt.Printf("Lunchmenyer från %s (sök: %s)\n\n", sourceDesc, query)
-	} else {
-		fmt.Printf("Lunchmenyer från %s\n\n", sourceDesc)
-	}
+	printHeader(sourceDesc, nameQuery, menuQuery)
 	for _, r := range restaurants {
 		fmt.Printf("%s — %s\n", r.Name, r.Price)
 		if r.Address != "" {
@@ -118,10 +140,10 @@ func main() {
 			fmt.Printf("  Tel: %s\n", r.Phone)
 		}
 		if r.Link != "" {
-			fmt.Printf("  Länk: %s\n", r.Link)
+			fmt.Printf("  Link: %s\n", r.Link)
 		}
 		if len(r.Menu) > 0 {
-			fmt.Printf("  Meny:\n")
+			fmt.Printf("  Menu:\n")
 			for _, line := range r.Menu {
 				fmt.Printf("    - %s\n", line)
 			}
@@ -185,17 +207,17 @@ func cacheAndWrap(body io.ReadCloser, url, dir, city, area string) (io.ReadClose
 
 	data, err := io.ReadAll(body)
 	if err != nil {
-		log.Fatalf("kunde inte läsa svaret: %v", err)
+		log.Fatalf("could not read response body: %v", err)
 	}
 
 	if dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err == nil {
 			cachePath := filepath.Join(dir, fmt.Sprintf("%s_%s.html", city, area))
 			if err := os.WriteFile(cachePath, data, 0o644); err != nil {
-				log.Printf("kunde inte skriva cache (%s): %v", cachePath, err)
+				log.Printf("could not write cache (%s): %v", cachePath, err)
 			}
 		} else {
-			log.Printf("kunde inte skapa cachekatalog (%s): %v", dir, err)
+			log.Printf("could not create cache directory (%s): %v", dir, err)
 		}
 	}
 
@@ -207,19 +229,19 @@ func promptAndSaveConfig(path string) *Config {
 
 	var city, area string
 	for {
-		fmt.Print("Ange URL från kvartersmenyn (t.ex. https://www.kvartersmenyn.se/index.php/goteborg/area/garda_161): ")
+		fmt.Print("Enter kvartersmenyn URL (e.g. https://www.kvartersmenyn.se/index.php/goteborg/area/garda_161): ")
 		line, _ := reader.ReadString('\n')
 		line = strings.TrimSpace(line)
 		c, a, ok := parseAreaURL(line)
 		if !ok {
-			fmt.Println("Kunde inte tolka URL:en. Försök igen.")
+			fmt.Println("Could not parse the URL. Please try again.")
 			continue
 		}
 		city, area = c, a
 		break
 	}
 
-	fmt.Print("Cache TTL i Go-durationformat (standard 6h): ")
+	fmt.Print("Cache TTL in Go duration format (default 6h): ")
 	ttlInput, _ := reader.ReadString('\n')
 	ttlInput = strings.TrimSpace(ttlInput)
 	if ttlInput == "" {
@@ -239,7 +261,7 @@ func promptAndSaveConfig(path string) *Config {
 	}
 
 	if err := saveConfig(path, cfg); err != nil {
-		fmt.Printf("Varning: kunde inte skriva config: %v\n", err)
+		fmt.Printf("Warning: could not write config: %v\n", err)
 	}
 
 	return cfg
@@ -301,7 +323,14 @@ func matchesName(name, queryLower string, maxDistance int) bool {
 		return true
 	}
 
-	dist := fuzzy.RankMatchFold(queryLower, lowerName)
+	normName := normalizeToken(lowerName)
+	normQuery := normalizeToken(queryLower)
+
+	if normQuery != "" && strings.Contains(normName, normQuery) {
+		return true
+	}
+
+	dist := fuzzy.RankMatchFold(normQuery, normName)
 	return dist >= 0 && dist <= maxDistance
 }
 
@@ -313,4 +342,100 @@ func fuzzThreshold(length int) int {
 		return 2
 	}
 	return 3
+}
+
+func normalizeToken(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return b.String()
+}
+
+func filterByMenu(restaurants []Restaurant, query string) []Restaurant {
+	queryLower := strings.ToLower(query)
+	normQuery := normalizeToken(queryLower)
+	maxDistance := fuzzThreshold(len(normQuery))
+
+	var filtered []Restaurant
+	for _, r := range restaurants {
+		menuText := strings.ToLower(strings.Join(r.Menu, " "))
+		if matchesText(menuText, queryLower, normQuery, maxDistance) {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
+}
+
+func matchesText(text, rawQuery, normQuery string, maxDistance int) bool {
+	if strings.Contains(text, rawQuery) {
+		return true
+	}
+	normText := normalizeToken(text)
+	if normQuery != "" && strings.Contains(normText, normQuery) {
+		return true
+	}
+	if normQuery == "" {
+		return false
+	}
+	dist := fuzzy.RankMatchFold(normQuery, normText)
+	return dist >= 0 && dist <= maxDistance
+}
+
+func filterCombined(restaurants []Restaurant, nameQuery, menuQuery string) []Restaurant {
+	nameLower := strings.ToLower(strings.TrimSpace(nameQuery))
+	menuLower := strings.ToLower(strings.TrimSpace(menuQuery))
+
+	normName := normalizeToken(nameLower)
+	normMenu := normalizeToken(menuLower)
+
+	maxName := fuzzThreshold(len(normName))
+	maxMenu := fuzzThreshold(len(normMenu))
+
+	var filtered []Restaurant
+	for _, r := range restaurants {
+		matchedName := false
+		matchedMenu := false
+
+		if nameLower != "" {
+			matchedName = matchesName(r.Name, nameLower, maxName)
+		}
+		if menuLower != "" {
+			menuText := strings.ToLower(strings.Join(r.Menu, " "))
+			matchedMenu = matchesText(menuText, menuLower, normMenu, maxMenu)
+		}
+
+		if matchedName || matchedMenu {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
+}
+
+func noHitMsg(source, nameQuery, menuQuery string) {
+	switch {
+	case nameQuery != "" && menuQuery != "":
+		fmt.Printf("No matches for name \"%s\" or menu \"%s\" in %s\n", nameQuery, menuQuery, source)
+	case nameQuery != "":
+		fmt.Printf("No matches for \"%s\" in %s\n", nameQuery, source)
+	case menuQuery != "":
+		fmt.Printf("No menu lines matched \"%s\" in %s\n", menuQuery, source)
+	default:
+		fmt.Printf("No lunch menus found in %s\n", source)
+	}
+}
+
+func printHeader(source, nameQuery, menuQuery string) {
+	switch {
+	case nameQuery != "" && menuQuery != "":
+		fmt.Printf("Lunch menus from %s (name: %s, menu: %s)\n\n", source, nameQuery, menuQuery)
+	case nameQuery != "":
+		fmt.Printf("Lunch menus from %s (name: %s)\n\n", source, nameQuery)
+	case menuQuery != "":
+		fmt.Printf("Lunch menus from %s (menu: %s)\n\n", source, menuQuery)
+	default:
+		fmt.Printf("Lunch menus from %s\n\n", source)
+	}
 }

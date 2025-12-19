@@ -11,18 +11,24 @@ Ett litet terminalverktyg som hämtar lunchmenyer från [kvartersmenyn.se](https
 Flaggor:
 
  - `-area` – områdessluggen från URL:en, t.ex. `garda_161` (kan sättas i config). Måste anges om inte satt i config.
- - `-city` – stadssegmentet i URL:en, t.ex. `goteborg` (kan sättas i config). Måste anges om inte satt i config.
+- `-area` – områdessluggen från URL:en, t.ex. `garda_161` (kan sättas i config). Måste anges om inte satt i config.
+- `-city` – stadssegmentet i URL:en, t.ex. `goteborg` (kan sättas i config). Måste anges om inte satt i config.
 - `-file` – valfritt lokalt HTML-dokument (hoppar över nätverksanrop, bra för testning).
-- `-search` – filtrera på restaurangnamn (case-insensitive med fuzzy matchning).
+- `-name` – filtrera på restaurangnamn (case-insensitive med fuzzy matchning).
+- `-menu` – filtrera på menyrader (case-insensitive med fuzzy matchning).
+- `-search` – filtrera både namn och meny (fuzzy); kan kombineras med `-name`/`-menu` (de specifika vinner).
 - `-cache-dir` – katalog för cachead HTML (tom sträng stänger av). Default följer OS: Linux `~/.cache/kvartersmenyn/`, macOS `~/Library/Caches/kvartersmenyn/`, Windows `%LOCALAPPDATA%\\kvartersmenyn\\Cache\\` (kan sättas i config).
 - `-cache-ttl` – hur länge cachen får leva, t.ex. `6h` (default), `1h`, `48h` (kan sättas i config).
 - `-config` – sökväg till YAML-konfig (default: Linux `~/.config/kvartersmenyn/config.yaml`, macOS `~/Library/Application Support/kvartersmenyn/config.yaml`, Windows `%LOCALAPPDATA%\\kvartersmenyn\\config.yaml`).
+- `-help` – visa hjälpen och avsluta.
 
 Exempel:
 
 ```bash
 go run . -area garda_161
-go run . -area garda_161 -search ullevi
+go run . -area garda_161 -name ullevi
+go run . -area garda_161 -menu burgare
+go run . -area garda_161 -search gaby   # söker både namn och meny
 go run . -area garda_161 -cache-ttl 2h
 go run . -city stockholm -area ostermalm_42
 go run . -file fixtures/garda.html
