@@ -24,6 +24,7 @@ type Flags struct {
 	Name     string
 	Search   string
 	Menu     string
+	Day      string
 	CacheDir string
 	CacheTTL string
 	Config   string
@@ -36,6 +37,7 @@ type Options struct {
 	Name     string
 	Search   string
 	Menu     string
+	Day      int
 	CacheDir string
 	CacheTTL time.Duration
 }
@@ -63,6 +65,7 @@ func main() {
 	flag.StringVar(&flags.Name, "name", "", "Filter by restaurant name (fuzzy, case-insensitive)")
 	flag.StringVar(&flags.Menu, "menu", "", "Filter by menu text (fuzzy, case-insensitive)")
 	flag.StringVar(&flags.Search, "search", "", "Filter both name and menu (fuzzy, case-insensitive)")
+	flag.StringVar(&flags.Day, "day", "", "Day of week to fetch (mon, tue, wed, thu, fri, sat, sun or 1-7)")
 	flag.StringVar(&flags.CacheDir, "cache-dir", "", "Directory for cached HTML (empty to disable, can be set in config)")
 	flag.StringVar(&flags.CacheTTL, "cache-ttl", "", "How long to reuse cached HTML (e.g. 6h, 2h). Overwrites config/default when set.")
 	flag.StringVar(&flags.Config, "config", defaultConfigPath(), "Path to YAML config (city, area, cache)")
@@ -77,6 +80,7 @@ func main() {
 		fmt.Fprintln(out, "  --name        Filter by restaurant name (fuzzy, case-insensitive)")
 		fmt.Fprintln(out, "  --menu        Filter by menu text (fuzzy, case-insensitive)")
 		fmt.Fprintln(out, "  --search      Filter both name and menu (fuzzy, case-insensitive)")
+		fmt.Fprintln(out, "  --day         Day of week to fetch (mon, tue, wed, thu, fri, sat, sun or 1-7)")
 		fmt.Fprintln(out, "  --cache-dir   Directory for cached HTML (empty to disable, can be set in config)")
 		fmt.Fprintln(out, "  --cache-ttl   How long to reuse cached HTML (e.g. 6h, 2h)")
 		fmt.Fprintf(out, "  --config      Path to YAML config (default: %s)\n", defaultConfigPath())
@@ -110,6 +114,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if day, ok := parseDayFlag(flags.Day); ok {
+		opts.Day = day
+	} else if flags.Day != "" {
+		log.Fatalf("invalid --day value: %q (use mon/tue/... or 1-7)", flags.Day)
+	} else {
+		opts.Day = weekdayToDay(time.Now().Weekday())
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -119,7 +130,7 @@ func main() {
 	combinedQuery := strings.TrimSpace(opts.Search)
 
 	for _, area := range opts.Areas {
-		reader, sourceRaw, err := loadAreaReader(ctx, opts.CacheDir, area, opts.CacheTTL)
+		reader, sourceRaw, err := loadAreaReader(ctx, opts.CacheDir, area, opts.Day, opts.CacheTTL)
 		if err != nil {
 			log.Fatalf("could not fetch data for %s: %v", areaLabel(area), err)
 		}
@@ -147,7 +158,7 @@ func main() {
 			}
 		}
 
-		sourceDesc := describeSource(area, sourceRaw)
+		sourceDesc := describeSource(area, opts.Day, sourceRaw)
 		if len(restaurants) == 0 {
 			noHitMsg(sourceDesc, nameQuery, menuQuery)
 			continue
@@ -176,12 +187,18 @@ func main() {
 	}
 }
 
-func buildAreaURL(city, area string) string {
-	return fmt.Sprintf("https://www.kvartersmenyn.se/index.php/%s/area/%s", city, area)
+func buildAreaURL(city, area string, day int) string {
+	if isNumericCity(city) {
+		return fmt.Sprintf("https://www.kvartersmenyn.se/index.php/find/_/city/%s/area/%s/day/%d", city, area, day)
+	}
+	return fmt.Sprintf("https://www.kvartersmenyn.se/index.php/%s/area/%s/day/%d", city, area, day)
 }
 
-func buildCityURL(city string) string {
-	return fmt.Sprintf("https://www.kvartersmenyn.se/index.php/%s", city)
+func buildCityURL(city string, day int) string {
+	if isNumericCity(city) {
+		return fmt.Sprintf("https://www.kvartersmenyn.se/index.php/find/_/city/%s/day/%d", city, day)
+	}
+	return fmt.Sprintf("https://www.kvartersmenyn.se/index.php/%s/day/%d", city, day)
 }
 
 func areaLabel(area AreaConfig) string {
@@ -191,28 +208,33 @@ func areaLabel(area AreaConfig) string {
 	return fmt.Sprintf("%s/%s", area.City, area.Area)
 }
 
-func describeSource(area AreaConfig, source string) string {
+func describeSource(area AreaConfig, day int, source string) string {
 	label := areaLabel(area)
+	dayLabel := dayLabel(day)
+	if dayLabel != "" {
+		label = fmt.Sprintf("%s (day %s)", label, dayLabel)
+	}
 	if strings.HasPrefix(source, "cache:") {
 		return label + " (cache)"
 	}
 	return label
 }
 
-func loadAreaReader(ctx context.Context, cacheDir string, area AreaConfig, ttl time.Duration) (io.ReadCloser, string, error) {
+func loadAreaReader(ctx context.Context, cacheDir string, area AreaConfig, day int, ttl time.Duration) (io.ReadCloser, string, error) {
 	cacheKey := area.Area
 	if cacheKey == "" {
 		cacheKey = "all"
 	}
+	cacheKey = fmt.Sprintf("%s_day%d", cacheKey, day)
 	if cache, desc, ok := tryCache(cacheDir, area.City, cacheKey, ttl); ok {
 		return cache, desc, nil
 	}
 
 	var url string
 	if area.Area == "" {
-		url = buildCityURL(area.City)
+		url = buildCityURL(area.City, day)
 	} else {
-		url = buildAreaURL(area.City, area.Area)
+		url = buildAreaURL(area.City, area.Area, day)
 	}
 	resp, err := fetchHTML(ctx, url)
 	if err != nil {
@@ -400,7 +422,21 @@ func looksLikeURL(input string) bool {
 		strings.Contains(input, "https://") ||
 		strings.Contains(input, "index.php/") ||
 		strings.Contains(input, "/area/") ||
-		strings.Contains(input, "area/")
+		strings.Contains(input, "area/") ||
+		strings.Contains(input, "/city/") ||
+		strings.Contains(input, "city/")
+}
+
+func isNumericCity(city string) bool {
+	if city == "" {
+		return false
+	}
+	for _, r := range city {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func parseAreaURL(raw string) (string, string, bool) {
@@ -424,13 +460,22 @@ func parseAreaURL(raw string) (string, string, bool) {
 		return "", "", false
 	}
 
-	city := parts[0]
+	var city string
 	var area string
-	for i := 0; i < len(parts)-1; i++ {
-		if parts[i] == "area" {
-			area = parts[i+1]
-			break
+	for i := 0; i < len(parts); i++ {
+		switch parts[i] {
+		case "city":
+			if i+1 < len(parts) {
+				city = parts[i+1]
+			}
+		case "area":
+			if i+1 < len(parts) {
+				area = parts[i+1]
+			}
 		}
+	}
+	if city == "" {
+		city = parts[0]
 	}
 
 	if city == "" {
@@ -565,6 +610,73 @@ func filterCombined(restaurants []Restaurant, nameQuery, menuQuery string) []Res
 		}
 	}
 	return filtered
+}
+
+func parseDayFlag(input string) (int, bool) {
+	input = strings.TrimSpace(strings.ToLower(input))
+	if input == "" {
+		return 0, false
+	}
+	switch input {
+	case "1", "mon", "monday":
+		return 1, true
+	case "2", "tue", "tues", "tuesday":
+		return 2, true
+	case "3", "wed", "weds", "wednesday":
+		return 3, true
+	case "4", "thu", "thur", "thurs", "thursday":
+		return 4, true
+	case "5", "fri", "friday":
+		return 5, true
+	case "6", "sat", "saturday":
+		return 6, true
+	case "7", "sun", "sunday":
+		return 7, true
+	default:
+		return 0, false
+	}
+}
+
+func weekdayToDay(w time.Weekday) int {
+	switch w {
+	case time.Monday:
+		return 1
+	case time.Tuesday:
+		return 2
+	case time.Wednesday:
+		return 3
+	case time.Thursday:
+		return 4
+	case time.Friday:
+		return 5
+	case time.Saturday:
+		return 6
+	case time.Sunday:
+		return 7
+	default:
+		return 1
+	}
+}
+
+func dayLabel(day int) string {
+	switch day {
+	case 1:
+		return "mon"
+	case 2:
+		return "tue"
+	case 3:
+		return "wed"
+	case 4:
+		return "thu"
+	case 5:
+		return "fri"
+	case 6:
+		return "sat"
+	case 7:
+		return "sun"
+	default:
+		return ""
+	}
 }
 
 func noHitMsg(source, nameQuery, menuQuery string) {
