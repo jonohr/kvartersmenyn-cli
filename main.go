@@ -28,6 +28,7 @@ type Flags struct {
 	CacheTTL string
 	Config   string
 	Help     bool
+	InitCfg  bool
 }
 
 type Options struct {
@@ -66,6 +67,7 @@ func main() {
 	flag.StringVar(&flags.CacheTTL, "cache-ttl", "", "How long to reuse cached HTML (e.g. 6h, 2h). Overwrites config/default when set.")
 	flag.StringVar(&flags.Config, "config", defaultConfigPath(), "Path to YAML config (city, area, cache)")
 	flag.BoolVar(&flags.Help, "help", false, "Show help")
+	flag.BoolVar(&flags.InitCfg, "init-config", false, "Run the interactive config setup and exit")
 	flag.Parse()
 
 	if flags.Help {
@@ -73,11 +75,17 @@ func main() {
 		return
 	}
 
+	if flags.InitCfg {
+		promptAndSaveConfig(flags.Config)
+		return
+	}
+
 	cfg, err := loadConfig(flags.Config)
 	if err != nil || cfg == nil || len(configAreas(cfg)) == 0 {
 		if len(flags.Areas) == 0 {
 			fmt.Println("No valid config found. We need at least one kvartersmenyn URL and (optional) cache TTL.")
-			cfg = promptAndSaveConfig(flags.Config)
+			promptAndSaveConfig(flags.Config)
+			return
 		} else if cfg == nil {
 			cfg = &Config{}
 		}

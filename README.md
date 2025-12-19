@@ -18,6 +18,7 @@ Flags:
 - `-cache-dir` - directory for cached HTML (empty string disables). Default per OS: Linux `~/.cache/kvartersmenyn/`, macOS `~/Library/Caches/kvartersmenyn/`, Windows `%LOCALAPPDATA%\\kvartersmenyn\\Cache\\` (can be set in config).
 - `-cache-ttl` - how long to reuse cache, e.g. `6h` (default), `1h`, `48h` (can be set in config).
 - `-config` - path to YAML config (default: Linux `~/.config/kvartersmenyn/config.yaml`, macOS `~/Library/Application Support/kvartersmenyn/config.yaml`, Windows `%LOCALAPPDATA%\\kvartersmenyn\\config.yaml`).
+- `-init-config` - run the interactive config setup and exit.
 - `-help` - show help and exit.
 
 Examples:
@@ -30,6 +31,7 @@ go run . -area garda_161 -search gaby   # searches both name and menu
 go run . -area garda_161 -cache-ttl 2h
 go run . -city stockholm -area ostermalm_42
 go run . -city goteborg -area garda_161 -area johanneberg_43
+go run . -init-config
 ```
 
 ## Config file
