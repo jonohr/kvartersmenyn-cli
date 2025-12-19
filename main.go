@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -11,43 +12,73 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"bytes"
 
 	"github.com/lithammer/fuzzysearch/fuzzy"
 )
 
+type Flags struct {
+	City     string
+	Area     string
+	File     string
+	Search   string
+	CacheDir string
+	CacheTTL string
+	Config   string
+}
+
+type Options struct {
+	City     string
+	Area     string
+	File     string
+	Search   string
+	CacheDir string
+	CacheTTL time.Duration
+}
+
 func main() {
-	area := flag.String("area", "garda_161", "Area slug from kvartersmenyn, e.g. garda_161")
-	city := flag.String("city", "goteborg", "City segment used in the kvartersmenyn URL")
-	localFile := flag.String("file", "", "Optional local HTML file to parse instead of fetching from the site")
-	search := flag.String("search", "", "Filter by restaurant name (fuzzy, case-insensitive)")
-	cacheDir := flag.String("cache-dir", ".cache", "Directory for cached HTML (empty to disable)")
-	cacheTTL := flag.Duration("cache-ttl", 6*time.Hour, "How long to reuse cached HTML")
+	flags := Flags{}
+	flag.StringVar(&flags.City, "city", "", "City segment used in the kvartersmenyn URL (can be set in config)")
+	flag.StringVar(&flags.Area, "area", "", "Area slug from kvartersmenyn, e.g. garda_161 (can be set in config)")
+	flag.StringVar(&flags.File, "file", "", "Optional local HTML file to parse instead of fetching from the site")
+	flag.StringVar(&flags.Search, "search", "", "Filter by restaurant name (fuzzy, case-insensitive)")
+	flag.StringVar(&flags.CacheDir, "cache-dir", "", "Directory for cached HTML (empty to disable, can be set in config)")
+	flag.StringVar(&flags.CacheTTL, "cache-ttl", "", "How long to reuse cached HTML (e.g. 6h, 2h). Overwrites config/default when set.")
+	flag.StringVar(&flags.Config, "config", defaultConfigPath(), "Path to YAML config (city, area, cache)")
 	flag.Parse()
+
+	cfg, err := loadConfig(flags.Config)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+
+	opts := mergeOptions(cfg, flags)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	var reader io.ReadCloser
 	var sourceDesc string
-	if *localFile != "" {
-		file, err := os.Open(*localFile)
+	if opts.File != "" {
+		file, err := os.Open(opts.File)
 		if err != nil {
-			log.Fatalf("kunde inte läsa filen %s: %v", *localFile, err)
+			log.Fatalf("kunde inte läsa filen %s: %v", opts.File, err)
 		}
 		reader = file
-		sourceDesc = *localFile
+		sourceDesc = opts.File
 	} else {
-		if cache, desc, ok := tryCache(*cacheDir, *city, *area, *cacheTTL); ok {
+		if opts.City == "" || opts.Area == "" {
+			log.Fatal("city och area måste anges via flaggor eller config")
+		}
+		if cache, desc, ok := tryCache(opts.CacheDir, opts.City, opts.Area, opts.CacheTTL); ok {
 			reader = cache
 			sourceDesc = desc
 		} else {
-			url := buildAreaURL(*city, *area)
+			url := buildAreaURL(opts.City, opts.Area)
 			resp, err := fetchHTML(ctx, url)
 			if err != nil {
 				log.Fatalf("kunde inte hämta data: %v", err)
 			}
-			reader, sourceDesc = cacheAndWrap(resp.Body, url, *cacheDir, *city, *area)
+			reader, sourceDesc = cacheAndWrap(resp.Body, url, opts.CacheDir, opts.City, opts.Area)
 		}
 	}
 	defer reader.Close()
@@ -57,7 +88,7 @@ func main() {
 		log.Fatalf("kunde inte tolka sidan: %v", err)
 	}
 
-	query := strings.TrimSpace(*search)
+	query := strings.TrimSpace(opts.Search)
 	if query != "" {
 		restaurants = filterRestaurants(restaurants, query)
 	}
