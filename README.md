@@ -13,7 +13,7 @@ From a cloned repo:
 One-liner:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jonohr/kvartersmenyn-cli/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jonohr/kvartersmenyn-cli/main/install.sh | bash -s -- </dev/tty
 ```
 
 You can choose a destination directory:
@@ -21,6 +21,8 @@ You can choose a destination directory:
 ```bash
 ./install.sh --dest ~/.local/bin
 ```
+
+By default it installs to `/usr/local/bin` and will use `sudo` if needed.
 
 On macOS, the script will optionally remove the quarantine attribute so the binary can run without Gatekeeper prompts.
 

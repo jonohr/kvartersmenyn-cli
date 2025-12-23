@@ -62,11 +62,7 @@ case "$arch" in
 esac
 
 if [[ -z "$dest" ]]; then
-  if [[ -w "/usr/local/bin" ]]; then
-    dest="/usr/local/bin"
-  else
-    dest="${HOME}/.local/bin"
-  fi
+  dest="/usr/local/bin"
 fi
 
 mkdir -p "$dest"
@@ -91,18 +87,42 @@ fi
 
 tar -C "$tmpdir" -xzf "${tmpdir}/${archive}"
 
+install_cmd=()
 if command -v install >/dev/null 2>&1; then
-  install -m 0755 "${tmpdir}/${BIN_NAME}" "${dest}/${BIN_NAME}"
+  install_cmd=(install -m 0755 "${tmpdir}/${BIN_NAME}" "${dest}/${BIN_NAME}")
 else
-  cp "${tmpdir}/${BIN_NAME}" "${dest}/${BIN_NAME}"
-  chmod 0755 "${dest}/${BIN_NAME}"
+  install_cmd=(cp "${tmpdir}/${BIN_NAME}" "${dest}/${BIN_NAME}")
 fi
+
+if [[ -w "$dest" ]]; then
+  "${install_cmd[@]}"
+else
+  if command -v sudo >/dev/null 2>&1; then
+    sudo "${install_cmd[@]}"
+  else
+    dest="${HOME}/.local/bin"
+    mkdir -p "$dest"
+    install_cmd=()
+    if command -v install >/dev/null 2>&1; then
+      install_cmd=(install -m 0755 "${tmpdir}/${BIN_NAME}" "${dest}/${BIN_NAME}")
+    else
+      install_cmd=(cp "${tmpdir}/${BIN_NAME}" "${dest}/${BIN_NAME}")
+    fi
+    "${install_cmd[@]}"
+  fi
+fi
+
+chmod 0755 "${dest}/${BIN_NAME}" 2>/dev/null || true
 
 echo "Installed ${BIN_NAME} to ${dest}/${BIN_NAME}"
 
 if [[ "$os" = "Darwin" ]]; then
   printf "Remove macOS quarantine attribute (recommended)? [y/N] "
-  read -r reply
+  if [[ -r /dev/tty ]]; then
+    read -r reply </dev/tty
+  else
+    read -r reply
+  fi
   if [[ "$reply" = "y" || "$reply" = "Y" ]]; then
     xattr -dr com.apple.quarantine "${dest}/${BIN_NAME}"
     echo "Removed quarantine attribute."
