@@ -80,20 +80,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-auth_header=()
-token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
-if [[ -n "$token" ]]; then
-  auth_header=(-H "Authorization: Bearer ${token}")
-fi
-
 if command -v curl >/dev/null 2>&1; then
-  curl -fsSL "${auth_header[@]}" -o "${tmpdir}/${archive}" "$url"
+  curl -fsSL -o "${tmpdir}/${archive}" "$url"
 elif command -v wget >/dev/null 2>&1; then
-  if [[ ${#auth_header[@]} -gt 0 ]]; then
-    wget -q --header="${auth_header[1]}" -O "${tmpdir}/${archive}" "$url"
-  else
-    wget -q -O "${tmpdir}/${archive}" "$url"
-  fi
+  wget -q -O "${tmpdir}/${archive}" "$url"
 else
   echo "Missing curl or wget." >&2
   exit 1
