@@ -276,7 +276,7 @@ func fetchHTML(ctx context.Context, url string) (*http.Response, error) {
 		return nil, err
 	}
 
-	req.Header.Set("User-Agent", "kvartersmenyn-cli/0.1 (+https://www.kvartersmenyn.se/)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
 	req.Header.Set("Accept-Language", "sv-SE,sv;q=0.9,en;q=0.8")
 
 	client := http.Client{
