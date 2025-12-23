@@ -2,6 +2,8 @@
 
 A small terminal tool that fetches lunch menus from [kvartersmenyn.se](https://www.kvartersmenyn.se/). You provide one or more areas via config or flags; if missing, you will be prompted to paste a kvartersmenyn URL on startup.
 
+Disclaimer: This project is vibe-coded and may have rough edges.
+
 ## Install (binary)
 
 From a cloned repo:
@@ -10,10 +12,10 @@ From a cloned repo:
 ./install.sh
 ```
 
-One-liner:
+One-liner (installs to /usr/local/bin, uses sudo if needed):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jonohr/kvartersmenyn-cli/main/install.sh | bash -s -- </dev/tty
+curl -fsSL https://raw.githubusercontent.com/jonohr/kvartersmenyn-cli/main/install.sh | sudo bash -s -- </dev/tty
 ```
 
 You can choose a destination directory:

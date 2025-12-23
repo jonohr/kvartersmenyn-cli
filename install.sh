@@ -4,6 +4,10 @@ set -euo pipefail
 REPO="jonohr/kvartersmenyn-cli"
 BIN_NAME="kvartersmenyn-cli"
 
+log() {
+  echo "[install] $*"
+}
+
 usage() {
   cat <<'EOF'
 Usage: ./install.sh [--dest DIR]
@@ -34,6 +38,8 @@ done
 
 os="$(uname -s)"
 arch="$(uname -m)"
+log "Detected OS: ${os}"
+log "Detected arch: ${arch}"
 
 case "$os" in
   Darwin)
@@ -64,9 +70,11 @@ esac
 if [[ -z "$dest" ]]; then
   dest="/usr/local/bin"
 fi
+log "Install destination: ${dest}"
 
 archive="${BIN_NAME}_${os_label}_${arch_label}.tar.gz"
 url="https://github.com/${REPO}/releases/latest/download/${archive}"
+log "Download URL: ${url}"
 
 tmpdir="$(mktemp -d)"
 cleanup() {
@@ -75,14 +83,17 @@ cleanup() {
 trap cleanup EXIT
 
 if command -v curl >/dev/null 2>&1; then
+  log "Downloading with curl..."
   curl -fsSL -o "${tmpdir}/${archive}" "$url"
 elif command -v wget >/dev/null 2>&1; then
+  log "Downloading with wget..."
   wget -q -O "${tmpdir}/${archive}" "$url"
 else
   echo "Missing curl or wget." >&2
   exit 1
 fi
 
+log "Extracting archive..."
 tar -C "$tmpdir" -xzf "${tmpdir}/${archive}"
 
 install_cmd=()
@@ -93,15 +104,18 @@ else
 fi
 
 if [[ -w "$dest" ]]; then
+  log "Installing to ${dest}..."
   mkdir -p "$dest"
   "${install_cmd[@]}"
 else
   if command -v sudo >/dev/null 2>&1; then
+    log "Installing to ${dest} with sudo..."
     sudo mkdir -p "$dest"
     sudo "${install_cmd[@]}"
   else
     dest="${HOME}/.local/bin"
     mkdir -p "$dest"
+    log "Installing to ${dest} (no sudo available)..."
     install_cmd=()
     if command -v install >/dev/null 2>&1; then
       install_cmd=(install -m 0755 "${tmpdir}/${BIN_NAME}" "${dest}/${BIN_NAME}")
