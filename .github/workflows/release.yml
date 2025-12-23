@@ -66,19 +66,77 @@ jobs:
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
+        if: ${{ matrix.goos != 'darwin' }}
         with:
           name: kvartersmenyn-cli_${{ matrix.goos == 'darwin' && 'macOS' || matrix.goos }}_${{ matrix.goarch }}
           path: dist/*
 
+      - name: Upload macOS build artifacts (raw)
+        uses: actions/upload-artifact@v4
+        if: ${{ matrix.goos == 'darwin' }}
+        with:
+          name: kvartersmenyn-cli_macos_raw_${{ matrix.goarch }}
+          path: dist/*
+
+  build-macos-universal:
+    runs-on: macos-latest
+    needs: build-release
+    steps:
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: kvartersmenyn-cli_macos_raw_*
+          path: macos-dist
+          merge-multiple: true
+
+      - name: Build universal macOS binary
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          name="kvartersmenyn-cli"
+          outdir="dist/macos_universal"
+          mkdir -p "${outdir}"
+          lipo -create \
+            "macos-dist/darwin_amd64/${name}" \
+            "macos-dist/darwin_arm64/${name}" \
+            -output "${outdir}/${name}"
+          chmod 0755 "${outdir}/${name}"
+          archive="dist/${name}_macOS_universal.tar.gz"
+          tar -C "${outdir}" -czf "${archive}" .
+          sha256sum "${archive}" > "${archive}.sha256"
+
+      - name: Upload macOS universal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kvartersmenyn-cli_macOS_universal
+          path: dist/*
+
   publish-release:
     runs-on: ubuntu-latest
-    needs: build-release
+    needs:
+      - build-release
+      - build-macos-universal
     permissions:
       contents: write
     steps:
-      - name: Download build artifacts
+      - name: Download Linux artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: kvartersmenyn-cli_linux_*
+          path: dist
+          merge-multiple: true
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: kvartersmenyn-cli_windows_*
+          path: dist
+          merge-multiple: true
+
+      - name: Download macOS universal artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: kvartersmenyn-cli_macOS_universal
           path: dist
           merge-multiple: true
 
