@@ -38,6 +38,13 @@ go run . -c goteborg
 go run . -i
 ```
 
+## macOS Gatekeeper
+
+If macOS blocks the downloaded binary because it is unsigned, you can either:
+
+- Right-click the file, choose Open, then confirm once.
+- Or run: `xattr -dr com.apple.quarantine /path/to/kvartersmenyn-cli`
+
 ## Config file
 
 Create a config file (default path varies per OS, see `--config` above) to avoid passing flags:
