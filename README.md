@@ -10,31 +10,32 @@ A small terminal tool that fetches lunch menus from [kvartersmenyn.se](https://w
 
 Flags:
 
-- `--area` - area slug from the URL, e.g. `garda_161` (can be repeated or comma-separated).
-- `--city` - city segment from the URL, e.g. `goteborg` (required when using `--area`; optional for whole-city search).
-- `--name` - filter by restaurant name (case-insensitive, fuzzy).
-- `--menu` - filter by menu text (case-insensitive, fuzzy).
-- `--search` - filter both name and menu (fuzzy); can be combined with `--name`/`--menu` (specific ones win).
-- `--day` - day of week to fetch (mon, tue, wed, thu, fri, sat, sun or 1-7). Defaults to today.
-- `--cache-dir` - directory for cached HTML (empty string disables). Default per OS: Linux `~/.cache/kvartersmenyn/`, macOS `~/Library/Caches/kvartersmenyn/`, Windows `%LOCALAPPDATA%\\kvartersmenyn\\Cache\\` (can be set in config).
-- `--cache-ttl` - how long to reuse cache, e.g. `6h` (default), `1h`, `48h` (can be set in config).
-- `--config` - path to YAML config (default: Linux `~/.config/kvartersmenyn/config.yaml`, macOS `~/Library/Application Support/kvartersmenyn/config.yaml`, Windows `%LOCALAPPDATA%\\kvartersmenyn\\config.yaml`).
-- `--init-config` - run the interactive config setup and exit.
-- `--help` - show help and exit.
+- `-a, --area` - area slug from the URL, e.g. `garda_161` (can be repeated or comma-separated).
+- `-c, --city` - city segment from the URL, e.g. `goteborg` (required when using `--area`; optional for whole-city search).
+- `-n, --name` - filter by restaurant name (case-insensitive, fuzzy).
+- `-m, --menu` - filter by menu text (case-insensitive, fuzzy).
+- `-s, --search` - filter both name and menu (fuzzy); can be combined with `--name`/`--menu` (specific ones win).
+- `-d, --day` - day of week to fetch (mon, tue, wed, thu, fri, sat, sun or 1-7). Defaults to today.
+- `-C, --cache-dir` - directory for cached HTML (empty string disables). Default per OS: Linux `~/.cache/kvartersmenyn/`, macOS `~/Library/Caches/kvartersmenyn/`, Windows `%LOCALAPPDATA%\\kvartersmenyn\\Cache\\` (can be set in config).
+- `-t, --cache-ttl` - how long to reuse cache, e.g. `6h` (default), `1h`, `48h` (can be set in config).
+- `-f, --config` - path to YAML config (default: Linux `~/.config/kvartersmenyn/config.yaml`, macOS `~/Library/Application Support/kvartersmenyn/config.yaml`, Windows `%LOCALAPPDATA%\\kvartersmenyn\\config.yaml`).
+- `-i, --init-config` - run the interactive config setup and exit.
+- `-h, --help` - show help and exit.
+- `-v, --version` - show version and exit.
 
 Examples:
 
 ```bash
-go run . --area garda_161
-go run . --area garda_161 --name ullevi
-go run . --area garda_161 --menu burgare
-go run . --area garda_161 --search gaby   # searches both name and menu
-go run . --area garda_161 --cache-ttl 2h
-go run . --area garda_161 --day fri
-go run . --city stockholm --area ostermalm_42
-go run . --city goteborg --area garda_161 --area johanneberg_43
-go run . --city goteborg
-go run . --init-config
+go run . -a garda_161
+go run . -a garda_161 -n ullevi
+go run . -a garda_161 -m burgare
+go run . -a garda_161 -s gaby   # searches both name and menu
+go run . -a garda_161 -t 2h
+go run . -a garda_161 -d fri
+go run . -c stockholm -a ostermalm_42
+go run . -c goteborg -a garda_161 -a johanneberg_43
+go run . -c goteborg
+go run . -i
 ```
 
 ## Config file
@@ -49,6 +50,8 @@ areas:
 cache_dir: .cache
 cache_ttl: 6h
 ```
+
+`cache_ttl` expects a Go duration (e.g. `6h`). If you provide a plain number (e.g. `6`), it is treated as hours.
 
 You can list multiple areas in the `areas` array. Each item can inherit `city` from the top level or override it with its own `city` value. If you only set `city` and omit `areas`, the whole city is used.
 

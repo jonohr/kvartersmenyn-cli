@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -30,6 +31,7 @@ type Flags struct {
 	Config   string
 	Help     bool
 	InitCfg  bool
+	Version  bool
 }
 
 type Options struct {
@@ -40,6 +42,12 @@ type Options struct {
 	Day      int
 	CacheDir string
 	CacheTTL time.Duration
+}
+
+type SourceInfo struct {
+	Label        string
+	Source       string
+	CacheUpdated time.Time
 }
 
 type areaList []string
@@ -58,39 +66,60 @@ func (a *areaList) Set(value string) error {
 	return nil
 }
 
+var version = "dev"
+
 func main() {
 	flags := Flags{}
 	flag.StringVar(&flags.City, "city", "", "City segment used in the kvartersmenyn URL (can be set in config)")
+	flag.StringVar(&flags.City, "c", "", "Short for --city")
 	flag.Var(&flags.Areas, "area", "Area slug from kvartersmenyn, e.g. garda_161 (can be repeated or comma-separated)")
+	flag.Var(&flags.Areas, "a", "Short for --area")
 	flag.StringVar(&flags.Name, "name", "", "Filter by restaurant name (fuzzy, case-insensitive)")
+	flag.StringVar(&flags.Name, "n", "", "Short for --name")
 	flag.StringVar(&flags.Menu, "menu", "", "Filter by menu text (fuzzy, case-insensitive)")
+	flag.StringVar(&flags.Menu, "m", "", "Short for --menu")
 	flag.StringVar(&flags.Search, "search", "", "Filter both name and menu (fuzzy, case-insensitive)")
+	flag.StringVar(&flags.Search, "s", "", "Short for --search")
 	flag.StringVar(&flags.Day, "day", "", "Day of week to fetch (mon, tue, wed, thu, fri, sat, sun or 1-7)")
+	flag.StringVar(&flags.Day, "d", "", "Short for --day")
 	flag.StringVar(&flags.CacheDir, "cache-dir", "", "Directory for cached HTML (empty to disable, can be set in config)")
+	flag.StringVar(&flags.CacheDir, "C", "", "Short for --cache-dir")
 	flag.StringVar(&flags.CacheTTL, "cache-ttl", "", "How long to reuse cached HTML (e.g. 6h, 2h). Overwrites config/default when set.")
+	flag.StringVar(&flags.CacheTTL, "t", "", "Short for --cache-ttl")
 	flag.StringVar(&flags.Config, "config", defaultConfigPath(), "Path to YAML config (city, area, cache)")
+	flag.StringVar(&flags.Config, "f", defaultConfigPath(), "Short for --config")
 	flag.BoolVar(&flags.Help, "help", false, "Show help")
+	flag.BoolVar(&flags.Help, "h", false, "Short for --help")
 	flag.BoolVar(&flags.InitCfg, "init-config", false, "Run the interactive config setup and exit")
+	flag.BoolVar(&flags.InitCfg, "i", false, "Short for --init-config")
+	flag.BoolVar(&flags.Version, "version", false, "Show version and exit")
+	flag.BoolVar(&flags.Version, "v", false, "Short for --version")
 	flag.Usage = func() {
 		out := flag.CommandLine.Output()
 		fmt.Fprintf(out, "Usage: %s [options]\n\n", os.Args[0])
 		fmt.Fprintln(out, "Options:")
-		fmt.Fprintln(out, "  --city        City segment used in the kvartersmenyn URL (can be set in config)")
-		fmt.Fprintln(out, "  --area        Area slug from kvartersmenyn, e.g. garda_161 (repeat or comma-separated)")
-		fmt.Fprintln(out, "  --name        Filter by restaurant name (fuzzy, case-insensitive)")
-		fmt.Fprintln(out, "  --menu        Filter by menu text (fuzzy, case-insensitive)")
-		fmt.Fprintln(out, "  --search      Filter both name and menu (fuzzy, case-insensitive)")
-		fmt.Fprintln(out, "  --day         Day of week to fetch (mon, tue, wed, thu, fri, sat, sun or 1-7)")
-		fmt.Fprintln(out, "  --cache-dir   Directory for cached HTML (empty to disable, can be set in config)")
-		fmt.Fprintln(out, "  --cache-ttl   How long to reuse cached HTML (e.g. 6h, 2h)")
-		fmt.Fprintf(out, "  --config      Path to YAML config (default: %s)\n", defaultConfigPath())
-		fmt.Fprintln(out, "  --init-config Run the interactive config setup and exit")
-		fmt.Fprintln(out, "  --help        Show help and exit")
+		fmt.Fprintln(out, "  -c, --city        City segment used in the kvartersmenyn URL (can be set in config)")
+		fmt.Fprintln(out, "  -a, --area        Area slug from kvartersmenyn, e.g. garda_161 (repeat or comma-separated)")
+		fmt.Fprintln(out, "  -n, --name        Filter by restaurant name (fuzzy, case-insensitive)")
+		fmt.Fprintln(out, "  -m, --menu        Filter by menu text (fuzzy, case-insensitive)")
+		fmt.Fprintln(out, "  -s, --search      Filter both name and menu (fuzzy, case-insensitive)")
+		fmt.Fprintln(out, "  -d, --day         Day of week to fetch (mon, tue, wed, thu, fri, sat, sun or 1-7)")
+		fmt.Fprintln(out, "  -C, --cache-dir   Directory for cached HTML (empty to disable, can be set in config)")
+		fmt.Fprintln(out, "  -t, --cache-ttl   How long to reuse cached HTML (e.g. 6h, 2h)")
+		fmt.Fprintf(out, "  -f, --config      Path to YAML config (default: %s)\n", defaultConfigPath())
+		fmt.Fprintln(out, "  -i, --init-config Run the interactive config setup and exit")
+		fmt.Fprintln(out, "  -h, --help        Show help and exit")
+		fmt.Fprintln(out, "  -v, --version     Show version and exit")
 	}
 	flag.Parse()
 
 	if flags.Help {
 		flag.Usage()
+		return
+	}
+
+	if flags.Version {
+		fmt.Println(version)
 		return
 	}
 
@@ -128,11 +157,12 @@ func main() {
 	nameQuery := strings.TrimSpace(opts.Name)
 	menuQuery := strings.TrimSpace(opts.Menu)
 	combinedQuery := strings.TrimSpace(opts.Search)
+	combinedQueryRaw := combinedQuery
 
 	for _, area := range opts.Areas {
-		reader, sourceRaw, err := loadAreaReader(ctx, opts.CacheDir, area, opts.Day, opts.CacheTTL)
+		reader, sourceInfo, err := loadAreaReader(ctx, opts.CacheDir, area, opts.Day, opts.CacheTTL)
 		if err != nil {
-			log.Fatalf("could not fetch data for %s: %v", areaLabel(area), err)
+			log.Fatalf("could not fetch data for %s: %v", areaLabelWithDay(area, opts.Day), err)
 		}
 
 		restaurants, err := parseRestaurants(reader)
@@ -158,28 +188,28 @@ func main() {
 			}
 		}
 
-		sourceDesc := describeSource(area, opts.Day, sourceRaw)
 		if len(restaurants) == 0 {
-			noHitMsg(sourceDesc, nameQuery, menuQuery)
+			printHeader(sourceInfo, nameQuery, menuQuery, combinedQueryRaw)
+			noHitMsg(nameQuery, menuQuery, combinedQueryRaw)
 			continue
 		}
 
-		printHeader(sourceDesc, nameQuery, menuQuery)
+		printHeader(sourceInfo, nameQuery, menuQuery, combinedQueryRaw)
 		for _, r := range restaurants {
-			fmt.Printf("%s — %s\n", r.Name, r.Price)
+			printLine(fmt.Sprintf("%s — %s", r.Name, r.Price))
 			if r.Address != "" {
-				fmt.Printf("  %s\n", r.Address)
+				printLine(fmt.Sprintf("  %s", r.Address))
 			}
 			if r.Phone != "" {
-				fmt.Printf("  Tel: %s\n", r.Phone)
+				printLine(fmt.Sprintf("  Tel: %s", r.Phone))
 			}
 			if r.Link != "" {
-				fmt.Printf("  Link: %s\n", r.Link)
+				printLine(fmt.Sprintf("  Link: %s", r.Link))
 			}
 			if len(r.Menu) > 0 {
-				fmt.Printf("  Menu:\n")
+				printLine("  Menu:")
 				for _, line := range r.Menu {
-					fmt.Printf("    - %s\n", line)
+					printLine(fmt.Sprintf("    - %s", line))
 				}
 			}
 			fmt.Println()
@@ -208,26 +238,23 @@ func areaLabel(area AreaConfig) string {
 	return fmt.Sprintf("%s/%s", area.City, area.Area)
 }
 
-func describeSource(area AreaConfig, day int, source string) string {
+func areaLabelWithDay(area AreaConfig, day int) string {
 	label := areaLabel(area)
-	dayLabel := dayLabel(day)
-	if dayLabel != "" {
-		label = fmt.Sprintf("%s (day %s)", label, dayLabel)
-	}
-	if strings.HasPrefix(source, "cache:") {
-		return label + " (cache)"
+	if dayLabel := dayLabel(day); dayLabel != "" {
+		return fmt.Sprintf("%s (day %s)", label, dayLabel)
 	}
 	return label
 }
 
-func loadAreaReader(ctx context.Context, cacheDir string, area AreaConfig, day int, ttl time.Duration) (io.ReadCloser, string, error) {
+func loadAreaReader(ctx context.Context, cacheDir string, area AreaConfig, day int, ttl time.Duration) (io.ReadCloser, SourceInfo, error) {
+	label := areaLabelWithDay(area, day)
 	cacheKey := area.Area
 	if cacheKey == "" {
 		cacheKey = "all"
 	}
 	cacheKey = fmt.Sprintf("%s_day%d", cacheKey, day)
-	if cache, desc, ok := tryCache(cacheDir, area.City, cacheKey, ttl); ok {
-		return cache, desc, nil
+	if cache, modTime, ok := tryCache(cacheDir, area.City, cacheKey, ttl); ok {
+		return cache, SourceInfo{Label: label, Source: "cache", CacheUpdated: modTime}, nil
 	}
 
 	var url string
@@ -238,10 +265,10 @@ func loadAreaReader(ctx context.Context, cacheDir string, area AreaConfig, day i
 	}
 	resp, err := fetchHTML(ctx, url)
 	if err != nil {
-		return nil, "", err
+		return nil, SourceInfo{}, err
 	}
-	reader, source := cacheAndWrap(resp.Body, url, cacheDir, area.City, cacheKey)
-	return reader, source, nil
+	reader, cacheUpdated := cacheAndWrap(resp.Body, cacheDir, area.City, cacheKey)
+	return reader, SourceInfo{Label: label, Source: "live", CacheUpdated: cacheUpdated}, nil
 }
 
 func fetchHTML(ctx context.Context, url string) (*http.Response, error) {
@@ -271,26 +298,26 @@ func fetchHTML(ctx context.Context, url string) (*http.Response, error) {
 	return resp, nil
 }
 
-func tryCache(dir, city, area string, ttl time.Duration) (io.ReadCloser, string, bool) {
+func tryCache(dir, city, area string, ttl time.Duration) (io.ReadCloser, time.Time, bool) {
 	if dir == "" || ttl <= 0 {
-		return nil, "", false
+		return nil, time.Time{}, false
 	}
 	cachePath := filepath.Join(dir, fmt.Sprintf("%s_%s.html", city, area))
 	info, err := os.Stat(cachePath)
 	if err != nil {
-		return nil, "", false
+		return nil, time.Time{}, false
 	}
 	if time.Since(info.ModTime()) > ttl {
-		return nil, "", false
+		return nil, time.Time{}, false
 	}
 	file, err := os.Open(cachePath)
 	if err != nil {
-		return nil, "", false
+		return nil, time.Time{}, false
 	}
-	return file, "cache:" + cachePath, true
+	return file, info.ModTime(), true
 }
 
-func cacheAndWrap(body io.ReadCloser, url, dir, city, area string) (io.ReadCloser, string) {
+func cacheAndWrap(body io.ReadCloser, dir, city, area string) (io.ReadCloser, time.Time) {
 	defer body.Close()
 
 	data, err := io.ReadAll(body)
@@ -298,18 +325,21 @@ func cacheAndWrap(body io.ReadCloser, url, dir, city, area string) (io.ReadClose
 		log.Fatalf("could not read response body: %v", err)
 	}
 
+	var cacheUpdated time.Time
 	if dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err == nil {
 			cachePath := filepath.Join(dir, fmt.Sprintf("%s_%s.html", city, area))
 			if err := os.WriteFile(cachePath, data, 0o644); err != nil {
 				log.Printf("could not write cache (%s): %v", cachePath, err)
+			} else {
+				cacheUpdated = time.Now()
 			}
 		} else {
 			log.Printf("could not create cache directory (%s): %v", dir, err)
 		}
 	}
 
-	return io.NopCloser(bytes.NewReader(data)), url
+	return io.NopCloser(bytes.NewReader(data)), cacheUpdated
 }
 
 func promptAndSaveConfig(path string) *Config {
@@ -679,28 +709,100 @@ func dayLabel(day int) string {
 	}
 }
 
-func noHitMsg(source, nameQuery, menuQuery string) {
+func noHitMsg(nameQuery, menuQuery, combinedQuery string) {
+	query := formatQuery(nameQuery, menuQuery, combinedQuery)
+	if query == "no filters" {
+		fmt.Println("No lunch menus found.")
+		return
+	}
+	fmt.Printf("No matches for %s.\n", query)
+}
+
+func printHeader(info SourceInfo, nameQuery, menuQuery, combinedQuery string) {
+	printLine(fmt.Sprintf("Lunch menus — %s", info.Label))
+	printLine(fmt.Sprintf("Query: %s", formatQuery(nameQuery, menuQuery, combinedQuery)))
+	printLine(fmt.Sprintf("Source: %s", formatSourceInfo(info)))
+	fmt.Println()
+}
+
+func formatQuery(nameQuery, menuQuery, combinedQuery string) string {
+	if combinedQuery != "" {
+		return fmt.Sprintf("search: %q (name+menu)", combinedQuery)
+	}
 	switch {
 	case nameQuery != "" && menuQuery != "":
-		fmt.Printf("No matches for name \"%s\" or menu \"%s\" in %s\n", nameQuery, menuQuery, source)
+		return fmt.Sprintf("name: %q, menu: %q", nameQuery, menuQuery)
 	case nameQuery != "":
-		fmt.Printf("No matches for \"%s\" in %s\n", nameQuery, source)
+		return fmt.Sprintf("name: %q", nameQuery)
 	case menuQuery != "":
-		fmt.Printf("No menu lines matched \"%s\" in %s\n", menuQuery, source)
+		return fmt.Sprintf("menu: %q", menuQuery)
 	default:
-		fmt.Printf("No lunch menus found in %s\n", source)
+		return "no filters"
 	}
 }
 
-func printHeader(source, nameQuery, menuQuery string) {
-	switch {
-	case nameQuery != "" && menuQuery != "":
-		fmt.Printf("Lunch menus from %s (name: %s, menu: %s)\n\n", source, nameQuery, menuQuery)
-	case nameQuery != "":
-		fmt.Printf("Lunch menus from %s (name: %s)\n\n", source, nameQuery)
-	case menuQuery != "":
-		fmt.Printf("Lunch menus from %s (menu: %s)\n\n", source, menuQuery)
-	default:
-		fmt.Printf("Lunch menus from %s\n\n", source)
+func formatSourceInfo(info SourceInfo) string {
+	source := info.Source
+	if source == "" {
+		source = "live"
 	}
+	if info.CacheUpdated.IsZero() {
+		return source
+	}
+	timestamp := info.CacheUpdated.Local().Format("2006-01-02 15:04")
+	return fmt.Sprintf("%s (cache updated %s)", source, timestamp)
+}
+
+func printLine(line string) {
+	width := terminalWidth()
+	for _, wrapped := range wrapLine(line, width) {
+		fmt.Println(wrapped)
+	}
+}
+
+func terminalWidth() int {
+	if value := strings.TrimSpace(os.Getenv("COLUMNS")); value != "" {
+		if n, err := strconv.Atoi(value); err == nil && n >= 40 {
+			return n
+		}
+	}
+	return 80
+}
+
+func wrapLine(line string, width int) []string {
+	if width <= 0 || len(line) <= width {
+		return []string{line}
+	}
+	indent := leadingSpaces(line)
+	words := strings.Fields(line)
+	if len(words) == 0 {
+		return []string{line}
+	}
+	var lines []string
+	current := strings.Repeat(" ", indent)
+	for _, word := range words {
+		if len(current) == indent {
+			current += word
+			continue
+		}
+		if len(current)+1+len(word) > width {
+			lines = append(lines, current)
+			current = strings.Repeat(" ", indent) + word
+			continue
+		}
+		current += " " + word
+	}
+	if strings.TrimSpace(current) != "" {
+		lines = append(lines, current)
+	}
+	return lines
+}
+
+func leadingSpaces(line string) int {
+	for i, r := range line {
+		if r != ' ' {
+			return i
+		}
+	}
+	return len(line)
 }

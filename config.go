@@ -173,13 +173,42 @@ func mergeOptions(cfg *Config, flags Flags) (Options, error) {
 	}
 
 	if ttlStr := firstNonEmpty(flags.CacheTTL, cfg.CacheTTL, "6h"); ttlStr != "" {
-		dur, err := time.ParseDuration(ttlStr)
-		if err == nil {
+		dur, ok := parseCacheTTL(ttlStr)
+		if ok {
 			opts.CacheTTL = dur
+		} else if flags.CacheTTL != "" {
+			return opts, fmt.Errorf("invalid --cache-ttl %q (use e.g. 6h, 1h, 48h)", flags.CacheTTL)
+		} else {
+			opts.CacheTTL = 6 * time.Hour
 		}
 	}
 
 	return opts, nil
+}
+
+func parseCacheTTL(input string) (time.Duration, bool) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return 0, false
+	}
+	if dur, err := time.ParseDuration(input); err == nil {
+		return dur, true
+	}
+	if allDigits(input) {
+		if hours, err := time.ParseDuration(input + "h"); err == nil {
+			return hours, true
+		}
+	}
+	return 0, false
+}
+
+func allDigits(input string) bool {
+	for _, r := range input {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return input != ""
 }
 
 func configAreas(cfg *Config) []AreaConfig {
