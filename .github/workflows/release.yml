@@ -46,16 +46,20 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
+          os_label="${GOOS}"
+          if [ "${GOOS}" = "darwin" ]; then
+            os_label="macOS"
+          fi
           name="kvartersmenyn-cli"
           outdir="dist/${GOOS}_${GOARCH}"
           out="${outdir}/${name}${{ matrix.exe_ext }}"
           mkdir -p "${outdir}"
           go build -trimpath -ldflags "-s -w" -o "${out}" .
           if [ "${GOOS}" = "windows" ]; then
-            archive="dist/${name}_${GOOS}_${GOARCH}.zip"
-            (cd "${outdir}" && zip -q -r "../${name}_${GOOS}_${GOARCH}.zip" .)
+            archive="dist/${name}_${os_label}_${GOARCH}.zip"
+            (cd "${outdir}" && zip -q -r "../${name}_${os_label}_${GOARCH}.zip" .)
           else
-            archive="dist/${name}_${GOOS}_${GOARCH}.tar.gz"
+            archive="dist/${name}_${os_label}_${GOARCH}.tar.gz"
             tar -C "${outdir}" -czf "${archive}" .
           fi
           sha256sum "${archive}" > "${archive}.sha256"
@@ -63,7 +67,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: kvartersmenyn-cli_${{ matrix.goos }}_${{ matrix.goarch }}
+          name: kvartersmenyn-cli_${{ matrix.goos == 'darwin' && 'macOS' || matrix.goos }}_${{ matrix.goarch }}
           path: dist/*
 
   publish-release:
