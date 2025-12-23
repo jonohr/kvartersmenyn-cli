@@ -72,7 +72,11 @@ if [[ -z "$dest" ]]; then
 fi
 log "Install destination: ${dest}"
 
-archive="${BIN_NAME}_${os_label}_${arch_label}.tar.gz"
+if [[ "${os_label}" = "macOS" ]]; then
+  archive="${BIN_NAME}_${os_label}_universal.tar.gz"
+else
+  archive="${BIN_NAME}_${os_label}_${arch_label}.tar.gz"
+fi
 url="https://github.com/${REPO}/releases/latest/download/${archive}"
 log "Download URL: ${url}"
 
