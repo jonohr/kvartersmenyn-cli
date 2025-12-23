@@ -2,12 +2,6 @@
 
 A small terminal tool that fetches lunch menus from [kvartersmenyn.se](https://www.kvartersmenyn.se/). You provide one or more areas via config or flags; if missing, you will be prompted to paste a kvartersmenyn URL on startup.
 
-## Getting started
-
-1. Install Go 1.21+.
-2. Fetch deps: `go mod tidy`.
-3. Run: `go run .`
-
 ## Install (binary)
 
 From a cloned repo:
