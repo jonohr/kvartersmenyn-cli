@@ -8,6 +8,28 @@ A small terminal tool that fetches lunch menus from [kvartersmenyn.se](https://w
 2. Fetch deps: `go mod tidy`.
 3. Run: `go run .`
 
+## Install (binary)
+
+From a cloned repo:
+
+```bash
+./install.sh
+```
+
+You can choose a destination directory:
+
+```bash
+./install.sh --dest ~/.local/bin
+```
+
+If the repo is private, set a token (scope: repo):
+
+```bash
+GITHUB_TOKEN=... ./install.sh
+```
+
+On macOS, the script will optionally remove the quarantine attribute so the binary can run without Gatekeeper prompts.
+
 Flags:
 
 - `-a, --area` - area slug from the URL, e.g. `garda_161` (can be repeated or comma-separated).
