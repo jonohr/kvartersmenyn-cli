@@ -34,6 +34,7 @@ type Flags struct {
 	Version  bool
 }
 
+// Options are the merged result of flags + config + defaults.
 type Options struct {
 	Areas    []AreaConfig
 	Name     string
@@ -50,6 +51,7 @@ type SourceInfo struct {
 	CacheUpdated time.Time
 }
 
+// areaList lets --area be repeated and/or comma-separated.
 type areaList []string
 
 func (a *areaList) String() string {
@@ -127,6 +129,7 @@ func main() {
 		return
 	}
 
+	// Load config (if any). If missing and no --area, prompt the user once.
 	cfg, err := loadConfig(flags.Config)
 	if err != nil || cfg == nil || len(configAreas(cfg)) == 0 {
 		if len(flags.Areas) == 0 {
@@ -138,6 +141,7 @@ func main() {
 		}
 	}
 
+	// Merge flags + config into a single options struct.
 	opts, err := mergeOptions(cfg, flags)
 	if err != nil {
 		log.Fatal(err)
@@ -150,6 +154,7 @@ func main() {
 		opts.Day = weekdayToDay(time.Now().Weekday())
 	}
 
+	// One timeout covers all requests in this run.
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -159,6 +164,7 @@ func main() {
 	combinedQueryRaw := combinedQuery
 
 	for _, area := range opts.Areas {
+		// Fetch HTML (cache-first), parse it, then filter and print.
 		reader, sourceInfo, err := loadAreaReader(ctx, opts.CacheDir, area, opts.Day, opts.CacheTTL)
 		if err != nil {
 			log.Fatalf("could not fetch data for %s: %v", areaLabelWithDay(area, opts.Day), err)
@@ -256,6 +262,7 @@ func loadAreaReader(ctx context.Context, cacheDir string, area AreaConfig, day i
 		return cache, SourceInfo{Label: label, Source: "cache", CacheUpdated: modTime}, nil
 	}
 
+	// No cache hit; build URL and fetch live.
 	var url string
 	if area.Area == "" {
 		url = buildCityURL(area.City, day)
@@ -276,6 +283,7 @@ func fetchHTML(ctx context.Context, url string) (*http.Response, error) {
 		return nil, err
 	}
 
+	// Use a normal browser UA to avoid trivial bot blocking.
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
 	req.Header.Set("Accept-Language", "sv-SE,sv;q=0.9,en;q=0.8")
 
@@ -319,6 +327,7 @@ func tryCache(dir, city, area string, ttl time.Duration) (io.ReadCloser, time.Ti
 func cacheAndWrap(body io.ReadCloser, dir, city, area string) (io.ReadCloser, time.Time) {
 	defer body.Close()
 
+	// Read once, optionally write cache, then return a fresh reader.
 	data, err := io.ReadAll(body)
 	if err != nil {
 		log.Fatalf("could not read response body: %v", err)

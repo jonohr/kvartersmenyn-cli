@@ -20,6 +20,7 @@ type Config struct {
 	CacheTTL string       `yaml:"cache_ttl"`
 }
 
+// AreaConfig is one target: either a whole city or a specific area.
 type AreaConfig struct {
 	City string `yaml:"city,omitempty"`
 	Area string `yaml:"area,omitempty"`
@@ -65,6 +66,7 @@ func defaultConfigPath() string {
 	return filepath.Join(base, "config.yaml")
 }
 
+// loadConfig returns an empty config when the file is missing.
 func loadConfig(path string) (*Config, error) {
 	if path == "" {
 		return &Config{}, nil
@@ -117,6 +119,7 @@ func expandHome(path string) string {
 	return path
 }
 
+// configBaseDir picks a platform-appropriate config directory.
 func configBaseDir() string {
 	home, _ := os.UserHomeDir()
 	switch runtime.GOOS {
@@ -172,6 +175,7 @@ func mergeOptions(cfg *Config, flags Flags) (Options, error) {
 		return opts, errors.New("city and area must be provided via flags or config")
 	}
 
+	// cache_ttl accepts either a full duration (6h) or just hours (6).
 	if ttlStr := firstNonEmpty(flags.CacheTTL, cfg.CacheTTL, "6h"); ttlStr != "" {
 		dur, ok := parseCacheTTL(ttlStr)
 		if ok {

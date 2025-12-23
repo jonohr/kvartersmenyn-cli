@@ -17,6 +17,7 @@ type Restaurant struct {
 	Menu    []string
 }
 
+// parseRestaurants scrapes the HTML into a list of restaurants.
 func parseRestaurants(r io.Reader) ([]Restaurant, error) {
 	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
@@ -73,6 +74,7 @@ func extractMenuLines(sel *goquery.Selection) []string {
 	return cleaned
 }
 
+// textWithBreaks keeps <br> as line breaks when extracting text.
 func textWithBreaks(sel *goquery.Selection) string {
 	var builder strings.Builder
 	for _, node := range sel.Nodes {
