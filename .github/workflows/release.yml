@@ -46,10 +46,19 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          name="kvartersmenyn-cli_${GOOS}_${GOARCH}"
-          out="dist/${name}${{ matrix.exe_ext }}"
+          name="kvartersmenyn-cli"
+          outdir="dist/${GOOS}_${GOARCH}"
+          out="${outdir}/${name}${{ matrix.exe_ext }}"
+          mkdir -p "${outdir}"
           go build -trimpath -ldflags "-s -w" -o "${out}" .
-          sha256sum "${out}" > "${out}.sha256"
+          if [ "${GOOS}" = "windows" ]; then
+            archive="dist/${name}_${GOOS}_${GOARCH}.zip"
+            (cd "${outdir}" && zip -q -r "../${name}_${GOOS}_${GOARCH}.zip" .)
+          else
+            archive="dist/${name}_${GOOS}_${GOARCH}.tar.gz"
+            tar -C "${outdir}" -czf "${archive}" .
+          fi
+          sha256sum "${archive}" > "${archive}.sha256"
 
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
