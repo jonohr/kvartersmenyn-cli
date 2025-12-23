@@ -16,6 +16,12 @@ From a cloned repo:
 ./install.sh
 ```
 
+One-liner (public repo):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jonohr/kvartersmenyn-cli/main/install.sh | bash
+```
+
 You can choose a destination directory:
 
 ```bash
@@ -26,6 +32,12 @@ If the repo is private, set a token (scope: repo):
 
 ```bash
 GITHUB_TOKEN=... ./install.sh
+```
+
+One-liner (private repo):
+
+```bash
+curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" https://raw.githubusercontent.com/jonohr/kvartersmenyn-cli/main/install.sh | bash
 ```
 
 On macOS, the script will optionally remove the quarantine attribute so the binary can run without Gatekeeper prompts.
