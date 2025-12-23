@@ -26,16 +26,16 @@ Flags:
 Examples:
 
 ```bash
-go run . -a garda_161
-go run . -a garda_161 -n ullevi
-go run . -a garda_161 -m burgare
-go run . -a garda_161 -s gaby   # searches both name and menu
-go run . -a garda_161 -t 2h
-go run . -a garda_161 -d fri
-go run . -c stockholm -a ostermalm_42
-go run . -c goteborg -a garda_161 -a johanneberg_43
-go run . -c goteborg
-go run . -i
+kvartersmenyn-cli -a garda_161
+kvartersmenyn-cli -a garda_161 -n ullevi
+kvartersmenyn-cli -a garda_161 -m burgare
+kvartersmenyn-cli -a garda_161 -s gaby   # searches both name and menu
+kvartersmenyn-cli -a garda_161 -t 2h
+kvartersmenyn-cli -a garda_161 -d fri
+kvartersmenyn-cli -c stockholm -a ostermalm_42
+kvartersmenyn-cli -c goteborg -a garda_161 -a johanneberg_43
+kvartersmenyn-cli -c goteborg
+kvartersmenyn-cli -i
 ```
 
 ## macOS Gatekeeper
