@@ -65,8 +65,6 @@ if [[ -z "$dest" ]]; then
   dest="/usr/local/bin"
 fi
 
-mkdir -p "$dest"
-
 archive="${BIN_NAME}_${os_label}_${arch_label}.tar.gz"
 url="https://github.com/${REPO}/releases/latest/download/${archive}"
 
@@ -95,9 +93,11 @@ else
 fi
 
 if [[ -w "$dest" ]]; then
+  mkdir -p "$dest"
   "${install_cmd[@]}"
 else
   if command -v sudo >/dev/null 2>&1; then
+    sudo mkdir -p "$dest"
     sudo "${install_cmd[@]}"
   else
     dest="${HOME}/.local/bin"
