@@ -93,7 +93,6 @@ func main() {
 	flag.BoolVar(&flags.InitCfg, "init-config", false, "Run the interactive config setup and exit")
 	flag.BoolVar(&flags.InitCfg, "i", false, "Short for --init-config")
 	flag.BoolVar(&flags.Version, "version", false, "Show version and exit")
-	flag.BoolVar(&flags.Version, "v", false, "Short for --version")
 	flag.Usage = func() {
 		out := flag.CommandLine.Output()
 		fmt.Fprintf(out, "Usage: %s [options]\n\n", os.Args[0])
@@ -109,7 +108,7 @@ func main() {
 		fmt.Fprintf(out, "  -f, --config      Path to YAML config (default: %s)\n", defaultConfigPath())
 		fmt.Fprintln(out, "  -i, --init-config Run the interactive config setup and exit")
 		fmt.Fprintln(out, "  -h, --help        Show help and exit")
-		fmt.Fprintln(out, "  -v, --version     Show version and exit")
+		fmt.Fprintln(out, "  --version     Show version and exit")
 	}
 	flag.Parse()
 

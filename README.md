@@ -21,7 +21,7 @@ Flags:
 - `-f, --config` - path to YAML config (default: Linux `~/.config/kvartersmenyn/config.yaml`, macOS `~/Library/Application Support/kvartersmenyn/config.yaml`, Windows `%LOCALAPPDATA%\\kvartersmenyn\\config.yaml`).
 - `-i, --init-config` - run the interactive config setup and exit.
 - `-h, --help` - show help and exit.
-- `-v, --version` - show version and exit.
+- `--version` - show version and exit.
 
 Examples:
 
